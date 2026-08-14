@@ -56,7 +56,7 @@ pub struct LaunchPlan {
 /// it is trusted.
 pub fn executable_for(game_dir: &std::path::Path) -> PathBuf {
     if cfg!(target_os = "macos") {
-        game_dir.join("ArmA3.app").join("Contents").join("MacOS").join("ArmA3")
+        game_dir.join("ArmA3 AS Native.app").join("Contents").join("MacOS").join("ArmA3 AS Native")
     } else {
         game_dir.join("arma3_x64")
     }
