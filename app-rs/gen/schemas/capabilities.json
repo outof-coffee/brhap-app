@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Core permissions for the brhap window. No plugins, since every capability the app needs is a command backed by the server-rs library.","local":true,"windows":["main"],"permissions":["core:default"]}}
