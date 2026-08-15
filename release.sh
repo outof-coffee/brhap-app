@@ -15,8 +15,8 @@ VERSION=$(cargo metadata --format-version=1 --no-deps | jq '.packages[0].version
 
 cargo tauri build --bundles app,dmg --target universal-apple-darwin
 
-# staple the app
-xcrun stapler staple "target/universal-apple-darwin/release/bundle/macos/brhap.app"
+# staple the app - this is done by the above when the key is provided correctly
+# xcrun stapler staple "target/universal-apple-darwin/release/bundle/macos/brhap.app"
 
 # notarize dmg
 xcrun notarytool submit "target/universal-apple-darwin/release/bundle/dmg/brhap_${VERSION}_universal.dmg" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
