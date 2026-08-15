@@ -182,7 +182,13 @@ mod tests {
         record_launch(
             &mut store,
             &ids(&["450814997", "463939057"]),
-            LaunchOptions { no_splash: true, skip_intro: false, empty_world: false },
+            LaunchOptions {
+                no_splash: true,
+                skip_intro: false,
+                empty_world: false,
+                intel_mode: false,
+                steam_overlay: false,
+            },
         );
         store
     }

@@ -1,11 +1,11 @@
-//! Terminal entry point for rarma-server.
+//! Terminal entry point for brhap-server.
 //!
 //! Deliberately thin. Its only job is to exercise the library without Tauri,
 //! so each phase of the port can be checked from a shell as it lands.
 
 use std::collections::HashSet;
 
-use rarma_server::{ARMA_APP_ID, api, cache, config, launch, mods, resolve, steam};
+use brhap_server::{ARMA_APP_ID, api, cache, config, launch, mods, resolve, steam};
 
 fn main() {
     // `cargo run -- fetch <id>` dumps what Steam actually returns for one
@@ -21,7 +21,7 @@ fn main() {
         return;
     }
 
-    println!("rarma-server {} (app id {})", env!("CARGO_PKG_VERSION"), ARMA_APP_ID);
+    println!("brhap-server {} (app id {})", env!("CARGO_PKG_VERSION"), ARMA_APP_ID);
     println!("config dir:  {}", config::config_dir().display());
     println!("cache file:  {}", config::cache_file().display());
 
@@ -89,9 +89,9 @@ fn dump_page(id: &str) {
         format!("https://steamcommunity.com/sharedfiles/filedetails/?id={id}")
     };
     println!("GET {url}");
-    println!("user-agent: {}", rarma_server::scrape::USER_AGENT);
+    println!("user-agent: {}", brhap_server::scrape::USER_AGENT);
 
-    let client = match rarma_server::scrape::client() {
+    let client = match brhap_server::scrape::client() {
         Ok(client) => client,
         Err(error) => {
             println!("client build failed: {error}");
@@ -119,7 +119,7 @@ fn dump_page(id: &str) {
     println!("bytes: {}", body.len());
     println!("has workshopItemTitle: {}", body.contains("workshopItemTitle"));
     println!("has RequiredItems: {}", body.contains("RequiredItems"));
-    println!("is_item_page: {}", rarma_server::scrape::is_item_page(&body));
+    println!("is_item_page: {}", brhap_server::scrape::is_item_page(&body));
     println!("--- first 400 chars ---");
     println!("{}", body.chars().take(400).collect::<String>());
 }

@@ -24,6 +24,8 @@ pub struct LaunchOptions {
     pub no_splash: bool,
     pub skip_intro: bool,
     pub empty_world: bool,
+    pub intel_mode: bool,
+    pub steam_overlay: bool,
 }
 
 /// One link to create inside the game directory.
@@ -54,9 +56,16 @@ pub struct LaunchPlan {
 /// The macOS path is confirmed on a real install. The Linux name is not: it
 /// has never been run here, and needs checking on an actual Linux box before
 /// it is trusted.
-pub fn executable_for(game_dir: &std::path::Path) -> PathBuf {
+///
+/// `intel_mode` picks the universal `ArmA3.app` build over the default
+/// Apple Silicon native one, for Intel Macs.
+pub fn executable_for(game_dir: &std::path::Path, intel_mode: bool) -> PathBuf {
     if cfg!(target_os = "macos") {
-        game_dir.join("ArmA3 AS Native.app").join("Contents").join("MacOS").join("ArmA3 AS Native")
+        if intel_mode {
+            game_dir.join("ArmA3.app").join("Contents").join("MacOS").join("ArmA3")
+        } else {
+            game_dir.join("ArmA3 AS Native.app").join("Contents").join("MacOS").join("ArmA3 AS Native")
+        }
     } else {
         game_dir.join("arma3_x64")
     }
@@ -106,7 +115,7 @@ pub fn build_launch_plan(paths: &SteamPaths, ids: &[String], options: LaunchOpti
 
     let mut env = BTreeMap::new();
     env.insert("SteamAppId".to_string(), ARMA_APP_ID.to_string());
-    if cfg!(target_os = "macos") {
+    if cfg!(target_os = "macos") && options.steam_overlay {
         env.insert(
             "DYLD_INSERT_LIBRARIES".to_string(),
             overlay_dylib(&paths.steam_dir).to_string_lossy().to_string(),
@@ -115,7 +124,7 @@ pub fn build_launch_plan(paths: &SteamPaths, ids: &[String], options: LaunchOpti
     }
 
     let cwd = paths.game.path.clone();
-    let executable = executable_for(&cwd);
+    let executable = executable_for(&cwd, options.intel_mode);
     let symlinks: Vec<Symlink> = unique
         .iter()
         .map(|id| Symlink {
@@ -187,9 +196,34 @@ mod tests {
 
     #[test]
     fn appends_only_the_options_that_are_enabled() {
-        let options = LaunchOptions { no_splash: true, empty_world: true, skip_intro: false };
+        let options = LaunchOptions {
+            no_splash: true,
+            empty_world: true,
+            skip_intro: false,
+            intel_mode: false,
+            steam_overlay: false,
+        };
         let plan = build_launch_plan(&paths(), &ids(&["450814997"]), options);
         assert_eq!(plan.args, vec!["-mod=450814997", "-noSplash", "-world=empty"]);
+    }
+
+    #[test]
+    fn omits_the_overlay_injection_when_steam_overlay_is_off() {
+        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default());
+        assert!(!plan.env.contains_key("DYLD_INSERT_LIBRARIES"));
+        assert!(!plan.env.contains_key("DYLD_FORCE_FLAT_NAMESPACE"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn injects_the_overlay_on_macos_when_steam_overlay_is_on() {
+        let options = LaunchOptions { steam_overlay: true, ..LaunchOptions::default() };
+        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), options);
+        assert_eq!(
+            plan.env.get("DYLD_INSERT_LIBRARIES"),
+            Some(&"/steam/Steam.AppBundle/Steam/Contents/MacOS/gameoverlayrenderer.dylib".to_string())
+        );
+        assert_eq!(plan.env.get("DYLD_FORCE_FLAT_NAMESPACE"), Some(&"1".to_string()));
     }
 
     #[test]

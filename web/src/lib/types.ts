@@ -21,6 +21,8 @@ export interface LaunchOptions {
   noSplash?: boolean
   skipIntro?: boolean
   emptyWorld?: boolean
+  intelMode?: boolean
+  steamOverlay?: boolean
 }
 
 export interface LaunchPlan {

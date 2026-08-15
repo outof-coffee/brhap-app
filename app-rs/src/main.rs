@@ -154,9 +154,6 @@ async fn launch(
     ids: Vec<String>,
     options: LaunchOptions,
 ) -> Result<Launched, String> {
-    if ids.is_empty() {
-        return Err("select at least one mod".into());
-    }
     let plan = build_launch_plan(&state.paths, &ids, options);
     let session = Arc::clone(&state.session);
     let profiles = Arc::clone(&state.profiles);

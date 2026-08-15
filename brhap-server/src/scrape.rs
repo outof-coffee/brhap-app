@@ -164,8 +164,8 @@ mod tests {
 
     /// The same trimmed fixture the Node tests use, so both implementations
     /// are checked against identical markup.
-    const MISERY: &str = include_str!("../../server/test/fixtures/misery.html");
-    const NO_REQUIRED: &str = include_str!("../../server/test/fixtures/no-required-items.html");
+    const MISERY: &str = include_str!("../fixtures/misery.html");
+    const NO_REQUIRED: &str = include_str!("../fixtures/no-required-items.html");
 
     #[test]
     fn reads_the_title_and_every_required_item() {

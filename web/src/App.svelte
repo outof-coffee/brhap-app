@@ -38,7 +38,13 @@
   let rescanNote = $state('')
 
   let plan = $state<LaunchPlan | null>(null)
-  let options = $state<LaunchOptions>({ noSplash: false, skipIntro: false, emptyWorld: false })
+  let options = $state<LaunchOptions>({
+    noSplash: false,
+    skipIntro: false,
+    emptyWorld: false,
+    intelMode: false,
+    steamOverlay: false,
+  })
   let running = $state(false)
   let pid = $state<number | null>(null)
   let status = $state('idle')
@@ -286,6 +292,13 @@
           <button class:secondary={view !== 'launch'} onclick={() => (view = 'launch')}>home</button>
           <button class:secondary={view !== 'profiles'} onclick={openProfiles}>profiles</button>
         </p>
+        <p class="hint loaded">Loaded: {#if applyNote}{applyNote}{:else}<em>none</em>{/if}</p>
+        <p class="hint">
+          <label><input type="checkbox" bind:checked={options.intelMode} /> Intel Mode</label>
+        </p>
+        <p class="hint">
+          <label><input type="checkbox" bind:checked={options.steamOverlay} /> Steam Overlay</label>
+        </p>
       {/if}
     </div>
     <img class="icon" src={icon} alt="" width="64" height="64" />
@@ -298,8 +311,6 @@
   {#if view === 'launch'}
     <p class="hint">
       {selectedIds.length} of {modIds.length} selected. Dependency lookups happen only when you click.
-      <span class="note">({mode} mode)</span>
-      {#if applyNote}<span class="note">{applyNote}</span>{/if}
     </p>
 
     <p class="hint">
@@ -390,7 +401,7 @@
         {plan.symlinks.length} symlink(s) will be created in the game directory. Status: {status}{pid ? ` (pid ${pid})` : ''}
       </p>
       <p class="hint">
-        <button onclick={startGame} disabled={running || selectedIds.length === 0}>launch</button>
+        <button onclick={startGame} disabled={running}>launch</button>
         <button class="destructive" onclick={stopGame} disabled={!running}>stop</button>
         {#if launchError}<span class="error">{launchError}</span>{/if}
       </p>
