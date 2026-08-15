@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Core permissions for the brhap window. No plugins, since every capability the app needs is a command backed by the server-rs library.",
+  "description": "Core permissions for the brhap window, plus the dialog plugin's default set for the mod-override folder picker.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default"]
 }

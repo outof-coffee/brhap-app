@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { open } from '@tauri-apps/plugin-dialog'
 
 import {
   ResolveError,
@@ -53,12 +54,12 @@ export const tauriAdapter: Adapter = {
     return invoke('walk_all')
   },
 
-  getPreview(ids: string[], options: LaunchOptions): Promise<LaunchPlan> {
-    return invoke('preview', { ids, options })
+  getPreview(ids: string[], options: LaunchOptions, overrides: Record<string, string>): Promise<LaunchPlan> {
+    return invoke('preview', { ids, options, overrides })
   },
 
-  launch(ids: string[], options: LaunchOptions): Promise<Launched> {
-    return invoke('launch', { ids, options })
+  launch(ids: string[], options: LaunchOptions, overrides: Record<string, string>): Promise<Launched> {
+    return invoke('launch', { ids, options, overrides })
   },
 
   stop(): Promise<void> {
@@ -92,5 +93,10 @@ export const tauriAdapter: Adapter = {
 
   deleteProfile(name: string): Promise<Profiles> {
     return invoke('delete_profile', { name })
+  },
+
+  async pickOverrideFolder(): Promise<string | null> {
+    const picked = await open({ directory: true, multiple: false })
+    return picked ?? null
   },
 }

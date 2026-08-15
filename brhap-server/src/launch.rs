@@ -91,7 +91,12 @@ fn quote(value: &str) -> String {
 }
 
 /// Describe a launch. Performs nothing.
-pub fn build_launch_plan(paths: &SteamPaths, ids: &[String], options: LaunchOptions) -> LaunchPlan {
+pub fn build_launch_plan(
+    paths: &SteamPaths,
+    ids: &[String],
+    options: LaunchOptions,
+    overrides: &BTreeMap<String, PathBuf>,
+) -> LaunchPlan {
     let mut unique: Vec<String> = Vec::new();
     for id in ids {
         if !unique.contains(id) {
@@ -128,7 +133,7 @@ pub fn build_launch_plan(paths: &SteamPaths, ids: &[String], options: LaunchOpti
     let symlinks: Vec<Symlink> = unique
         .iter()
         .map(|id| Symlink {
-            target: paths.workshop.path.join(id),
+            target: overrides.get(id).cloned().unwrap_or_else(|| paths.workshop.path.join(id)),
             link: cwd.join(id),
         })
         .collect();
@@ -172,15 +177,24 @@ mod tests {
         list.iter().map(|id| id.to_string()).collect()
     }
 
+    fn no_overrides() -> BTreeMap<String, PathBuf> {
+        BTreeMap::new()
+    }
+
     #[test]
     fn joins_mod_ids_with_semicolons_in_one_argument() {
-        let plan = build_launch_plan(&paths(), &ids(&["450814997", "463939057"]), LaunchOptions::default());
+        let plan = build_launch_plan(
+            &paths(),
+            &ids(&["450814997", "463939057"]),
+            LaunchOptions::default(),
+            &no_overrides(),
+        );
         assert_eq!(plan.args, vec!["-mod=450814997;463939057"]);
     }
 
     #[test]
     fn adds_no_mod_argument_when_nothing_is_selected() {
-        let plan = build_launch_plan(&paths(), &[], LaunchOptions::default());
+        let plan = build_launch_plan(&paths(), &[], LaunchOptions::default(), &no_overrides());
         assert!(plan.args.is_empty());
     }
 
@@ -190,6 +204,7 @@ mod tests {
             &paths(),
             &ids(&["463939057", "450814997", "463939057"]),
             LaunchOptions::default(),
+            &no_overrides(),
         );
         assert_eq!(plan.args, vec!["-mod=463939057;450814997"]);
     }
@@ -203,13 +218,14 @@ mod tests {
             intel_mode: false,
             steam_overlay: false,
         };
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), options);
+        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), options, &no_overrides());
         assert_eq!(plan.args, vec!["-mod=450814997", "-noSplash", "-world=empty"]);
     }
 
     #[test]
     fn omits_the_overlay_injection_when_steam_overlay_is_off() {
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default());
+        let plan =
+            build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &no_overrides());
         assert!(!plan.env.contains_key("DYLD_INSERT_LIBRARIES"));
         assert!(!plan.env.contains_key("DYLD_FORCE_FLAT_NAMESPACE"));
     }
@@ -218,7 +234,7 @@ mod tests {
     #[test]
     fn injects_the_overlay_on_macos_when_steam_overlay_is_on() {
         let options = LaunchOptions { steam_overlay: true, ..LaunchOptions::default() };
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), options);
+        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), options, &no_overrides());
         assert_eq!(
             plan.env.get("DYLD_INSERT_LIBRARIES"),
             Some(&"/steam/Steam.AppBundle/Steam/Contents/MacOS/gameoverlayrenderer.dylib".to_string())
@@ -228,13 +244,15 @@ mod tests {
 
     #[test]
     fn runs_from_the_game_directory_so_bare_ids_resolve() {
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default());
+        let plan =
+            build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &no_overrides());
         assert_eq!(plan.cwd, PathBuf::from("/steam/steamapps/common/Arma 3"));
     }
 
     #[test]
     fn links_each_workshop_directory_in_under_its_id() {
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default());
+        let plan =
+            build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &no_overrides());
         assert_eq!(
             plan.symlinks,
             vec![Symlink {
@@ -245,15 +263,35 @@ mod tests {
     }
 
     #[test]
+    fn an_override_replaces_the_workshop_directory_as_the_symlink_target() {
+        let mut overrides = BTreeMap::new();
+        overrides.insert("450814997".to_string(), PathBuf::from("/Users/tester/mymod"));
+        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &overrides);
+        assert_eq!(
+            plan.symlinks,
+            vec![Symlink {
+                target: PathBuf::from("/Users/tester/mymod"),
+                link: PathBuf::from("/steam/steamapps/common/Arma 3/450814997"),
+            }]
+        );
+    }
+
+    #[test]
     fn never_puts_quotes_inside_the_mod_argument_itself() {
-        let plan = build_launch_plan(&paths(), &ids(&["450814997", "463939057"]), LaunchOptions::default());
+        let plan = build_launch_plan(
+            &paths(),
+            &ids(&["450814997", "463939057"]),
+            LaunchOptions::default(),
+            &no_overrides(),
+        );
         assert!(!plan.args[0].contains('"'));
         assert!(!plan.args[0].contains('\''));
     }
 
     #[test]
     fn quotes_the_game_path_in_the_display_preview_only() {
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default());
+        let plan =
+            build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &no_overrides());
         assert!(plan.preview.contains("'/steam/steamapps/common/Arma 3'"));
         assert!(plan.preview.contains("-mod=450814997"));
     }

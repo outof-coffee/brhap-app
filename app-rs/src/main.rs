@@ -11,6 +11,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use brhap_server::launch::{LaunchOptions, LaunchPlan, build_launch_plan};
@@ -144,8 +145,9 @@ async fn preview(
     state: State<'_, AppState>,
     ids: Vec<String>,
     options: LaunchOptions,
+    overrides: BTreeMap<String, PathBuf>,
 ) -> Result<LaunchPlan, String> {
-    Ok(build_launch_plan(&state.paths, &ids, options))
+    Ok(build_launch_plan(&state.paths, &ids, options, &overrides))
 }
 
 #[tauri::command]
@@ -153,8 +155,9 @@ async fn launch(
     state: State<'_, AppState>,
     ids: Vec<String>,
     options: LaunchOptions,
+    overrides: BTreeMap<String, PathBuf>,
 ) -> Result<Launched, String> {
-    let plan = build_launch_plan(&state.paths, &ids, options);
+    let plan = build_launch_plan(&state.paths, &ids, options, &overrides);
     let session = Arc::clone(&state.session);
     let profiles = Arc::clone(&state.profiles);
     let workshop = state.paths.workshop.path.clone();
@@ -164,7 +167,7 @@ async fn launch(
         // launch leaves the previous record alone. The game is up either way,
         // so a failed write says so rather than reading as a failed launch.
         locked(&profiles)
-            .record_launch(&ids, options)
+            .record_launch(&ids, options, &overrides)
             .map_err(|error| format!("launched, but the last launch was not recorded: {error}"))?;
         Ok(launched)
     })
@@ -205,6 +208,7 @@ async fn stop(state: State<'_, AppState>) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let handle = app.handle().clone();
             // The library knows nothing about Tauri; this closure is the only

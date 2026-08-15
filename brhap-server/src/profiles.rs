@@ -12,6 +12,7 @@
 //!
 //! Field names are camelCase because this file is handed to the frontend as is.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -25,6 +26,7 @@ use crate::launch::LaunchOptions;
 pub struct LastLaunch {
     pub ids: Vec<String>,
     pub options: LaunchOptions,
+    pub overrides: BTreeMap<String, PathBuf>,
 }
 
 /// A named launch, kept until the user deletes it.
@@ -34,6 +36,8 @@ pub struct Profile {
     pub name: String,
     pub ids: Vec<String>,
     pub options: LaunchOptions,
+    #[serde(default)]
+    pub overrides: BTreeMap<String, PathBuf>,
 }
 
 /// The whole file. A Vec rather than a map so the list keeps the order the
@@ -76,8 +80,13 @@ impl From<std::io::Error> for ProfileError {
 }
 
 /// Record a successful launch, replacing whatever was there before.
-pub fn record_launch(store: &mut Profiles, ids: &[String], options: LaunchOptions) {
-    store.last_launch = Some(LastLaunch { ids: ids.to_vec(), options });
+pub fn record_launch(
+    store: &mut Profiles,
+    ids: &[String],
+    options: LaunchOptions,
+    overrides: &BTreeMap<String, PathBuf>,
+) {
+    store.last_launch = Some(LastLaunch { ids: ids.to_vec(), options, overrides: overrides.clone() });
 }
 
 /// Keep the last launch under a name. Names are unique, so a name already in
@@ -96,6 +105,7 @@ pub fn add_named(store: &mut Profiles, name: &str) -> Result<(), ProfileError> {
         name: name.to_string(),
         ids: last.ids.clone(),
         options: last.options,
+        overrides: last.overrides.clone(),
     });
     Ok(())
 }
@@ -149,8 +159,13 @@ impl ProfileStore {
         self.data.clone()
     }
 
-    pub fn record_launch(&mut self, ids: &[String], options: LaunchOptions) -> Result<(), ProfileError> {
-        record_launch(&mut self.data, ids, options);
+    pub fn record_launch(
+        &mut self,
+        ids: &[String],
+        options: LaunchOptions,
+        overrides: &BTreeMap<String, PathBuf>,
+    ) -> Result<(), ProfileError> {
+        record_launch(&mut self.data, ids, options, overrides);
         self.save()
     }
 
@@ -177,6 +192,10 @@ mod tests {
         list.iter().map(|id| id.to_string()).collect()
     }
 
+    fn no_overrides() -> BTreeMap<String, PathBuf> {
+        BTreeMap::new()
+    }
+
     fn launched() -> Profiles {
         let mut store = Profiles::default();
         record_launch(
@@ -189,6 +208,7 @@ mod tests {
                 intel_mode: false,
                 steam_overlay: false,
             },
+            &no_overrides(),
         );
         store
     }
@@ -196,7 +216,7 @@ mod tests {
     #[test]
     fn a_new_launch_replaces_the_previous_record() {
         let mut store = launched();
-        record_launch(&mut store, &ids(&["111"]), LaunchOptions::default());
+        record_launch(&mut store, &ids(&["111"]), LaunchOptions::default(), &no_overrides());
         assert_eq!(store.last_launch.map(|last| last.ids), Some(ids(&["111"])));
     }
 
@@ -210,13 +230,23 @@ mod tests {
         assert!(profile.options.no_splash);
     }
 
+    #[test]
+    fn naming_copies_overrides_from_the_last_launch() {
+        let mut store = Profiles::default();
+        let mut overrides = BTreeMap::new();
+        overrides.insert("450814997".to_string(), PathBuf::from("/Users/tester/mymod"));
+        record_launch(&mut store, &ids(&["450814997"]), LaunchOptions::default(), &overrides);
+        add_named(&mut store, "night ops").expect("saves");
+        assert_eq!(store.profiles[0].overrides, overrides);
+    }
+
     /// The saved copy is a copy. Launching something else afterwards must not
     /// rewrite a profile the user already named.
     #[test]
     fn a_saved_profile_does_not_follow_later_launches() {
         let mut store = launched();
         add_named(&mut store, "night ops").expect("saves");
-        record_launch(&mut store, &ids(&["111"]), LaunchOptions::default());
+        record_launch(&mut store, &ids(&["111"]), LaunchOptions::default(), &no_overrides());
         assert_eq!(store.profiles[0].ids, ids(&["450814997", "463939057"]));
     }
 
@@ -278,11 +308,16 @@ mod tests {
     #[test]
     fn round_trips_through_the_file_shape() {
         let mut store = launched();
+        store.last_launch.as_mut().expect("just launched").overrides =
+            BTreeMap::from([("450814997".to_string(), PathBuf::from("/Users/tester/mymod"))]);
         add_named(&mut store, "night ops").expect("saves");
+        store.profiles[0].overrides = store.last_launch.as_ref().expect("just launched").overrides.clone();
 
         let text = serde_json::to_string(&store).expect("serializes");
         assert!(text.contains("\"lastLaunch\""));
         assert!(text.contains("\"noSplash\""));
+        assert!(text.contains("\"overrides\""));
+        assert!(text.contains("\"450814997\":\"/Users/tester/mymod\""));
 
         let reparsed: Profiles = serde_json::from_str(&text).expect("parses");
         assert_eq!(reparsed, store);

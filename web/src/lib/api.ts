@@ -21,11 +21,13 @@ export const rescan = () => adapter.rescan()
 export const resetCache = () => adapter.resetCache()
 export const resolveItem = (id: string, refresh = false) => adapter.resolveItem(id, refresh)
 export const walkAll = () => adapter.walkAll()
-export const getPreview = (ids: string[], options: LaunchOptions = {}) =>
-  adapter.getPreview(ids, options)
-export const launch = (ids: string[], options: LaunchOptions = {}) => adapter.launch(ids, options)
+export const getPreview = (ids: string[], options: LaunchOptions = {}, overrides: Record<string, string> = {}) =>
+  adapter.getPreview(ids, options, overrides)
+export const launch = (ids: string[], options: LaunchOptions = {}, overrides: Record<string, string> = {}) =>
+  adapter.launch(ids, options, overrides)
 export const stop = () => adapter.stop()
 export const subscribe = (handler: (event: LaunchEvent) => void) => adapter.subscribe(handler)
 export const listProfiles = () => adapter.listProfiles()
 export const saveProfile = (name: string) => adapter.saveProfile(name)
 export const deleteProfile = (name: string) => adapter.deleteProfile(name)
+export const pickOverrideFolder = () => adapter.pickOverrideFolder()

@@ -56,12 +56,16 @@ export const httpAdapter: Adapter = {
     return json(await post('/api/walk'), 'walk')
   },
 
-  async getPreview(ids: string[], options: LaunchOptions): Promise<LaunchPlan> {
-    return json(await post('/api/preview', { ids, options }), 'preview')
+  async getPreview(
+    ids: string[],
+    options: LaunchOptions,
+    overrides: Record<string, string>,
+  ): Promise<LaunchPlan> {
+    return json(await post('/api/preview', { ids, options, overrides }), 'preview')
   },
 
-  async launch(ids: string[], options: LaunchOptions): Promise<Launched> {
-    return json(await post('/api/launch', { ids, options }), 'launch')
+  async launch(ids: string[], options: LaunchOptions, overrides: Record<string, string>): Promise<Launched> {
+    return json(await post('/api/launch', { ids, options, overrides }), 'launch')
   },
 
   async stop(): Promise<void> {
@@ -85,6 +89,10 @@ export const httpAdapter: Adapter = {
   },
 
   async deleteProfile(): Promise<Profiles> {
+    throw new Error(DESKTOP_ONLY)
+  },
+
+  async pickOverrideFolder(): Promise<string | null> {
     throw new Error(DESKTOP_ONLY)
   },
 }

@@ -6,6 +6,7 @@
     launch,
     listProfiles,
     mode,
+    pickOverrideFolder,
     rescan,
     resetCache,
     resolveItem,
@@ -45,6 +46,7 @@
     intelMode: false,
     steamOverlay: false,
   })
+  let overrides = $state<Record<string, string>>({})
   let running = $state(false)
   let pid = $state<number | null>(null)
   let status = $state('idle')
@@ -82,10 +84,23 @@
   async function startGame() {
     launchError = ''
     try {
-      await launch(selectedIds, options)
+      await launch(selectedIds, options, overrides)
     } catch (error) {
       launchError = error instanceof Error ? error.message : String(error)
     }
+  }
+
+  async function pickOverride(id: string) {
+    try {
+      const path = await pickOverrideFolder()
+      if (path) overrides[id] = path
+    } catch (error) {
+      errors[id] = error instanceof Error ? error.message : String(error)
+    }
+  }
+
+  function clearOverride(id: string) {
+    delete overrides[id]
   }
 
   async function stopGame() {
@@ -147,6 +162,7 @@
       if (known.has(id)) selected[id] = true
     }
     options = { ...profile.options }
+    overrides = { ...profile.overrides }
 
     const missing = profile.ids.filter((id) => !known.has(id))
     applyNote =
@@ -182,7 +198,8 @@
   $effect(() => {
     const ids = selectedIds
     const current = { ...options }
-    getPreview(ids, current)
+    const currentOverrides = { ...overrides }
+    getPreview(ids, current, currentOverrides)
       .then((result) => { plan = result })
       .catch(() => { plan = null })
   })
@@ -373,6 +390,15 @@
             {#if errors[id]}
               <span class="error">{errors[id]}</span>
               <button onclick={() => resolve(id, true)}>retry</button>
+            {/if}
+
+            {#if mode === 'desktop'}
+              {#if overrides[id]}
+                <span class="note">override: {overrides[id]}</span>
+                <button class="link" onclick={() => clearOverride(id)}>clear override</button>
+              {:else}
+                <button class="link" onclick={() => pickOverride(id)}>override</button>
+              {/if}
             {/if}
           </div>
         </li>

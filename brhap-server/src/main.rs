@@ -3,7 +3,7 @@
 //! Deliberately thin. Its only job is to exercise the library without Tauri,
 //! so each phase of the port can be checked from a shell as it lands.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use brhap_server::{ARMA_APP_ID, api, cache, config, launch, mods, resolve, steam};
 
@@ -73,7 +73,8 @@ fn main() {
     // Describes a launch of every installed mod. Creates no symlinks and
     // spawns nothing; this is the plan, not the act.
     let selected: Vec<String> = installed.iter().map(|item| item.id.clone()).collect();
-    let plan = launch::build_launch_plan(&paths, &selected, launch::LaunchOptions::default());
+    let plan =
+        launch::build_launch_plan(&paths, &selected, launch::LaunchOptions::default(), &BTreeMap::new());
     println!("launch plan: {} symlink(s) would be created", plan.symlinks.len());
     println!("{}", plan.preview);
 }

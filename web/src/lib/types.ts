@@ -44,12 +44,14 @@ export interface Launched {
 export interface LastLaunch {
   ids: string[]
   options: LaunchOptions
+  overrides: Record<string, string>
 }
 
 export interface Profile {
   name: string
   ids: string[]
   options: LaunchOptions
+  overrides: Record<string, string>
 }
 
 export interface Profiles {
@@ -86,8 +88,8 @@ export interface Adapter {
   resetCache(): Promise<Snapshot>
   resolveItem(id: string, refresh: boolean): Promise<Item>
   walkAll(): Promise<{ calls: number; resolved: number }>
-  getPreview(ids: string[], options: LaunchOptions): Promise<LaunchPlan>
-  launch(ids: string[], options: LaunchOptions): Promise<Launched>
+  getPreview(ids: string[], options: LaunchOptions, overrides: Record<string, string>): Promise<LaunchPlan>
+  launch(ids: string[], options: LaunchOptions, overrides: Record<string, string>): Promise<Launched>
   stop(): Promise<void>
   /** Subscribe to session events. Returns an unsubscribe function. */
   subscribe(handler: (event: LaunchEvent) => void): () => void
@@ -99,4 +101,6 @@ export interface Adapter {
   listProfiles(): Promise<Profiles>
   saveProfile(name: string): Promise<Profiles>
   deleteProfile(name: string): Promise<Profiles>
+  /** Opens a native folder picker. Desktop only; browser mode rejects. */
+  pickOverrideFolder(): Promise<string | null>
 }
