@@ -5,8 +5,12 @@ mod profiles;
 mod table;
 
 use brhap_core::LaunchOptions;
-use iced::widget::{button, checkbox, column, row, text};
+use iced::widget::{button, checkbox, column, image, row, text};
 use iced::{Color, Element, Fill};
+
+/// Bundled rather than reached for across crates, the same way the web UI
+/// keeps its own copy.
+const ICON: &[u8] = include_bytes!("../../assets/icon.png");
 use iced_aw::{TabBar, TabLabel};
 
 use crate::message::Message;
@@ -14,10 +18,12 @@ use crate::state::{Brhap, Flag, Screen};
 
 /// The web UI's #a33, used for anything the user needs to notice.
 pub(crate) const TROUBLE: Color = Color::from_rgb(0.667, 0.2, 0.2);
-/// A pale wash of TROUBLE, backing the unmet requirements panel.
-pub(crate) const TROUBLE_WASH: Color = Color::from_rgb(0.98, 0.93, 0.93);
-/// A shade darker than TROUBLE, for that panel's heading.
-pub(crate) const TROUBLE_DEEP: Color = Color::from_rgb(0.44, 0.11, 0.11);
+/// A dark wash of TROUBLE, backing the unmet requirements panel. Sits just
+/// above the Dark theme's own background so the panel reads as a block.
+pub(crate) const TROUBLE_WASH: Color = Color::from_rgb(0.19, 0.10, 0.10);
+/// That panel's heading. On a dark ground the emphasis has to come from being
+/// lighter than the body text rather than darker.
+pub(crate) const TROUBLE_HEADING: Color = Color::from_rgb(0.95, 0.60, 0.57);
 /// Requirements satisfied, or an override in force.
 pub(crate) const GOOD: Color = Color::from_rgb(0.15, 0.55, 0.25);
 /// We do not know yet, which is not the same as something being wrong.
@@ -42,17 +48,17 @@ fn header(state: &Brhap) -> Element<'_, Message> {
         state.apply_note.clone()
     };
 
-    // The row spans the window while the column takes only what it needs, so
-    // the remainder is the reserved space.
     row![
         column![
             text("brhap").size(26),
             text("Bohemian Rhapsody").size(14),
             text(format!("Loaded: {loaded}")).size(12),
         ]
-        .spacing(4),
+        .spacing(4)
+        .width(Fill),
+        // The 128px source drawn at 64, so it stays sharp on a retina display.
+        image(image::Handle::from_bytes(ICON)).width(64).height(64),
     ]
-    .width(Fill)
     .into()
 }
 

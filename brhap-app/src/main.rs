@@ -26,12 +26,19 @@ fn boot() -> (Brhap, Task<Message>) {
     (state, load)
 }
 
+/// Fixed rather than following the system. A named function rather than a
+/// closure, because the closure form cannot prove it works for every lifetime.
+fn theme(_state: &Brhap) -> iced::Theme {
+    iced::Theme::GruvboxDark
+}
+
 fn subscription(_state: &Brhap) -> Subscription<Message> {
     events::subscription().map(Message::Session)
 }
 
 fn main() -> iced::Result {
     iced::application(boot, update::update, view::view)
+        .theme(theme)
         .subscription(subscription)
         // Without this every status glyph renders as tofu.
         .font(iced_fonts::BOOTSTRAP_FONT_BYTES)

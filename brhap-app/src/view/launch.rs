@@ -5,7 +5,7 @@ use iced::widget::{Column, button, container, row, scrollable, text, tooltip};
 use iced::{Border, Center, Element, Fill};
 use iced_fonts::bootstrap;
 
-use super::{TROUBLE, TROUBLE_DEEP, TROUBLE_WASH, action, danger, flag, hint, link};
+use super::{TROUBLE, TROUBLE_HEADING, TROUBLE_WASH, action, danger, flag, hint, link};
 use crate::message::Message;
 use crate::state::{Brhap, Flag};
 
@@ -41,7 +41,7 @@ pub(crate) fn screen(state: &Brhap) -> Column<'_, Message> {
     if !unmet.is_empty() {
         let mut panel = Column::new()
             .spacing(4)
-            .push(text("Unmet requirements").size(15).color(TROUBLE_DEEP));
+            .push(text("Unmet requirements").size(15).color(TROUBLE_HEADING));
         for entry in unmet {
             panel = panel.push(text(entry).size(12).color(TROUBLE));
         }
