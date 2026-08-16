@@ -85,6 +85,14 @@ pub(crate) struct Row {
     pub(crate) over: Option<std::path::PathBuf>,
 }
 
+/// One line of the profile table. `table()` hands the view closures an owned
+/// value, so everything a cell needs is gathered here first.
+#[derive(Clone)]
+pub(crate) struct ProfileRow {
+    pub(crate) name: String,
+    pub(crate) summary: String,
+}
+
 /// One startup parameter.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Flag {
@@ -269,6 +277,19 @@ impl Brhap {
             .collect()
     }
 
+    /// The table's rows, in `store.profiles` order.
+    pub(crate) fn profile_rows(&self) -> Vec<ProfileRow> {
+        // uses describe() function below, which uses the profile's ids and options to summarize what it does
+        self.store
+            .profiles
+            .iter()
+            .map(|profile| ProfileRow {
+                name: profile.name.clone(),
+                summary: describe(&profile.ids, &profile.options),
+            })
+            .collect()
+    }
+
     /// Requirements of the selected mods that will not be loaded as things
     /// stand, following web/src/App.svelte:180-194.
     ///
@@ -322,5 +343,23 @@ impl Brhap {
             }
             Event::Error { message } => self.status = format!("error: {message}"),
         }
+    }
+}
+
+/// One-line summary of a saved launch, following `describe` in App.svelte:121.
+fn describe(ids: &[String], options: &LaunchOptions) -> String {
+    let flags: Vec<&str> = [
+        (options.no_splash, Flag::NoSplash.label()),
+        (options.skip_intro, Flag::SkipIntro.label()),
+        (options.empty_world, Flag::EmptyWorld.label()),
+    ]
+    .into_iter()
+    .filter_map(|(on, label)| on.then_some(label))
+    .collect();
+
+    if flags.is_empty() {
+        format!("{} mod(s)", ids.len())
+    } else {
+        format!("{} mod(s), {}", ids.len(), flags.join(" "))
     }
 }

@@ -7,7 +7,7 @@ use iced_fonts::bootstrap;
 
 use super::{CAUTION, GOOD, TROUBLE};
 use crate::message::Message;
-use crate::state::{Brhap, Row, Status};
+use crate::state::{Brhap, Row, ProfileRow, Status};
 
 /// Glyphs read at a glance, so they sit a little above the body text size.
 const GLYPH: f32 = 20.0;
@@ -28,6 +28,37 @@ pub(crate) fn mods(state: &Brhap) -> Element<'_, Message> {
     .padding_x(6)
     .padding_y(4)
     .into()
+}
+
+pub(crate) fn profiles(state: &Brhap) -> Element<'_, Message> {
+    table(
+        [
+            table::column(text(""), select_profile).width(30).align_x(Center).align_y(Center),
+            table::column(text("Profile"), profile_name).width(Fill),
+            table::column(text("Summary"), profile_summary).width(Fill),
+        ],
+        state.profile_rows(),
+    )
+    .padding_x(6)
+    .padding_y(4)
+    .into()
+}
+
+pub(crate) fn profile_name(row: ProfileRow) -> Element<'static, Message> {
+    text(row.name).size(14).into()
+}
+
+// TODO: use the planned arrow right into box glyph and correct action
+pub(crate) fn select_profile(row: ProfileRow) -> Element<'static, Message> {
+    let name = row.name.clone();
+    checkbox(false)
+        .size(15)
+        .into()
+}
+
+// TODO: use real summary
+pub(crate) fn profile_summary(row: ProfileRow) -> Element<'static, Message> {
+    text(row.summary).size(14).into()
 }
 
 fn select(row: Row) -> Element<'static, Message> {
