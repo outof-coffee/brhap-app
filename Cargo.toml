@@ -1,0 +1,6 @@
+# Both members are edition 2024, so the resolver is pinned to 3 rather than
+# left to the virtual-manifest default of 1.
+
+[workspace]
+resolver = "3"
+members = ["app-rs", "brhap-server"]
