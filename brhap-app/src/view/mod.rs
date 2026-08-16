@@ -14,6 +14,10 @@ use crate::state::{Brhap, Flag, Screen};
 
 /// The web UI's #a33, used for anything the user needs to notice.
 pub(crate) const TROUBLE: Color = Color::from_rgb(0.667, 0.2, 0.2);
+/// A pale wash of TROUBLE, backing the unmet requirements panel.
+pub(crate) const TROUBLE_WASH: Color = Color::from_rgb(0.98, 0.93, 0.93);
+/// A shade darker than TROUBLE, for that panel's heading.
+pub(crate) const TROUBLE_DEEP: Color = Color::from_rgb(0.44, 0.11, 0.11);
 /// Requirements satisfied, or an override in force.
 pub(crate) const GOOD: Color = Color::from_rgb(0.15, 0.55, 0.25);
 /// We do not know yet, which is not the same as something being wrong.

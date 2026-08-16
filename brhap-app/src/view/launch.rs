@@ -2,10 +2,10 @@
 
 use iced::widget::text::Text;
 use iced::widget::{Column, button, container, row, scrollable, text, tooltip};
-use iced::{Center, Element, Fill};
+use iced::{Border, Center, Element, Fill};
 use iced_fonts::bootstrap;
 
-use super::{TROUBLE, action, danger, flag, hint, link};
+use super::{TROUBLE, TROUBLE_DEEP, TROUBLE_WASH, action, danger, flag, hint, link};
 use crate::message::Message;
 use crate::state::{Brhap, Flag};
 
@@ -26,14 +26,36 @@ pub(crate) fn screen(state: &Brhap) -> Column<'_, Message> {
             .size(13),
         )
         .push(toolbar(state))
-        .push(scrollable(super::table::mods(state)).height(Fill));
+        // An embedded scrollbar always takes layout space instead of floating
+        // over the last column, so the row ends in the same place whether the
+        // list overflows or not.
+        .push(
+            scrollable(super::table::mods(state))
+                .direction(scrollable::Direction::Vertical(
+                    scrollable::Scrollbar::new().spacing(6),
+                ))
+                .height(Fill),
+        );
 
     let unmet = state.unmet();
     if !unmet.is_empty() {
-        page = page.push(text("Unmet requirements").size(16));
+        let mut panel = Column::new()
+            .spacing(4)
+            .push(text("Unmet requirements").size(15).color(TROUBLE_DEEP));
         for entry in unmet {
-            page = page.push(text(entry).size(12).color(TROUBLE));
+            panel = panel.push(text(entry).size(12).color(TROUBLE));
         }
+
+        page = page.push(
+            container(panel)
+                .padding(10)
+                .width(Fill)
+                .style(|_theme| container::Style {
+                    background: Some(TROUBLE_WASH.into()),
+                    border: Border { radius: 4.0.into(), ..Border::default() },
+                    ..Default::default()
+                }),
+        );
     }
 
     // All five are LaunchOptions fields. The web UI split them only because
