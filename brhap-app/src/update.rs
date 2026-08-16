@@ -18,13 +18,30 @@ pub(crate) fn update(state: &mut Brhap, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::Toggled(id, checked) => {
-            if checked {
-                state.selected.insert(id);
-            } else {
+            if !checked {
                 state.selected.remove(&id);
+                state.replan();
+                return Task::none();
             }
+
+            state.selected.insert(id.clone());
             state.replan();
-            Task::none()
+
+            // Selecting is a local act and always succeeds. The lookup is a
+            // side effect: if it fails the mod stays selected and the row just
+            // reports it. Only a direct click gets here, so applying a profile
+            // reads the cache and fetches nothing.
+            if state.item(&id).requires.is_some() || state.pending.contains(&id) {
+                return Task::none();
+            }
+
+            state.pending.insert(id.clone());
+            let core = Arc::clone(&state.core);
+            let target = id.clone();
+            Task::perform(
+                work::blocking(move || core.resolve_item(&target, false)),
+                move |result| Message::Resolved(id.clone(), result),
+            )
         }
         Message::Flagged(flag, value) => {
             flag.set(&mut state.options, value);

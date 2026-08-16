@@ -19,7 +19,7 @@ pub(crate) fn screen(state: &Brhap) -> Column<'_, Message> {
     page = page
         .push(
             text(format!(
-                "{} of {} selected. Dependency lookups happen only when you click.",
+                "{} of {} selected. Dependency lookups happen when you select.",
                 state.selected_count(),
                 state.mod_ids.len()
             ))
