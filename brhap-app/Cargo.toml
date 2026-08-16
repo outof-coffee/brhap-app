@@ -6,4 +6,8 @@ edition = "2024"
 [dependencies]
 brhap-core = { version = "0.1.0", path = "../brhap-core" }
 iced = "0.14"
+# Stripped to the tab bar. The defaults drag in chrono, num-format and
+# num-traits through the date, time and number widgets we do not use.
+iced_aw = { version = "0.14", default-features = false, features = ["tab_bar"] }
+iced_fonts = { version = "0.3", features = ["bootstrap"] }
 rfd = "0.17"
