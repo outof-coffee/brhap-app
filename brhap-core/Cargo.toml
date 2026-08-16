@@ -1,0 +1,8 @@
+[package]
+name = "brhap-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+brhap-server = { version = "0.1", path = "../brhap-server" }
+serde = { version = "1.0.229", features = ["derive"] }

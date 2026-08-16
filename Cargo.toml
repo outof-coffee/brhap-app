@@ -3,4 +3,4 @@
 
 [workspace]
 resolver = "3"
-members = ["app-rs", "brhap-server"]
+members = ["app-rs", "brhap-core", "brhap-server"]

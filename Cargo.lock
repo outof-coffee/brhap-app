@@ -181,12 +181,20 @@ dependencies = [
 name = "brhap"
 version = "0.2.0"
 dependencies = [
- "brhap-server",
+ "brhap-core",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+]
+
+[[package]]
+name = "brhap-core"
+version = "0.1.0"
+dependencies = [
+ "brhap-server",
+ "serde",
 ]
 
 [[package]]
