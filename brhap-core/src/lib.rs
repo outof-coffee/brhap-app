@@ -13,6 +13,9 @@
 //! Blocking, like the library underneath. Callers decide for themselves how to
 //! get this off their UI thread.
 
+pub mod settings;
+mod steam;
+
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -23,6 +26,7 @@ pub use brhap_server::profiles::{LastLaunch, Profile, Profiles};
 pub use brhap_server::resolve::{Resolved, Source};
 pub use brhap_server::session::{Event, Launched, Listener};
 pub use brhap_server::steam::{Located, SteamPaths};
+use settings::*;
 
 /// Per-mod replacement directories, keyed by workshop id.
 pub type Overrides = BTreeMap<String, std::path::PathBuf>;
@@ -57,6 +61,7 @@ pub struct Core {
     session: Arc<brhap_server::session::Session>,
     paths: SteamPaths,
     profiles: Mutex<brhap_server::profiles::ProfileStore>,
+    settings: Mutex<SettingsStore>
 }
 
 impl Core {
@@ -78,6 +83,7 @@ impl Core {
             profiles: Mutex::new(brhap_server::profiles::ProfileStore::new(
                 brhap_server::config::profiles_file(),
             )),
+            settings: Mutex::new(SettingsStore::new(settings_file())),
         }
     }
 
@@ -160,6 +166,8 @@ impl Core {
         options: LaunchOptions,
         overrides: &Overrides,
     ) -> Result<Launched, String> {
+        // try to save settings, but continue if not
+        let _ = locked(&self.settings).save();
         let plan = self.preview(ids, options, overrides);
         let launched = self
             .session
@@ -188,9 +196,20 @@ impl Core {
     pub fn list_profiles(&self) -> Profiles {
         locked(&self.profiles).view()
     }
+    
+    pub fn settings(&self) -> Settings { 
+        locked(&self.settings).view()
+    }
 
     /// Each of these returns the whole store, so a caller restates rather than
     /// patches.
+    pub fn save_steam_key(&self, key: &str) -> Result<Settings, String> {
+        let mut store = locked(&self.settings);
+        // todo: handle steam_id detection / ingress
+        store.save_steam_key(0, key.to_string()).map_err(|error| error.to_string())?;
+        Ok(store.view())
+    }
+    
     pub fn save_profile(&self, name: &str) -> Result<Profiles, String> {
         let mut store = locked(&self.profiles);
         store.save_named(name).map_err(|error| error.to_string())?;
@@ -202,4 +221,6 @@ impl Core {
         store.delete(name).map_err(|error| error.to_string())?;
         Ok(store.view())
     }
+
+    // todo: save verification of paths
 }
