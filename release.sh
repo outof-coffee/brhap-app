@@ -34,6 +34,7 @@ lipo -create \
 # cargo-packager only reads it from config, not from the environment, so the
 # config is generated here from .env and is gitignored.
 cat > packager.toml <<EOF
+# auto-generated - do not commit or edit!
 # name is set so cargo-packager skips its own auto-detect, which chdirs
 # into the config file path rather than its parent and errors out.
 name = "brhap-app"
