@@ -1,6 +1,12 @@
 # brhap 
 
-A (currently) macOS launcher for ArmA 3, targeted to mission and mod developers. It is early in development, and currently prototyped using tauri. With this comes a future compatibility with linux-like platforms.
+A (currently) macOS launcher for ArmA 3, targeted to mission and mod developers. It is early in development, with a future compatibility with linux-like platforms.
+
+## build and run
+
+```
+cargo run -p brhap-app
+```
 
 ## features
 - [x] Detects steam libraries and the first ArmA 3 installation it can access.

@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Core permissions for the brhap window, plus the dialog plugin's default set for the mod-override folder picker.","local":true,"windows":["main"],"permissions":["core:default","dialog:default"]}}

@@ -1,7 +1,0 @@
-{
-  "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Core permissions for the brhap window, plus the dialog plugin's default set for the mod-override folder picker.",
-  "windows": ["main"],
-  "permissions": ["core:default", "dialog:default"]
-}
