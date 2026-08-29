@@ -347,7 +347,7 @@ impl Brhap {
 }
 
 /// One-line summary of a saved launch, following `describe` in App.svelte:121.
-fn describe(ids: &[String], options: &LaunchOptions) -> String {
+pub(crate) fn describe(ids: &[String], options: &LaunchOptions) -> String {
     let flags: Vec<&str> = [
         (options.no_splash, Flag::NoSplash.label()),
         (options.skip_intro, Flag::SkipIntro.label()),

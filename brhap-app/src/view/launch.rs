@@ -5,7 +5,7 @@ use iced::widget::{Column, button, container, row, scrollable, text, tooltip};
 use iced::{Border, Center, Element, Fill};
 use iced_fonts::bootstrap;
 
-use super::{TROUBLE, TROUBLE_HEADING, TROUBLE_WASH, action, danger, flag, hint, link};
+use super::{TROUBLE, TROUBLE_HEADING, TROUBLE_WASH, action, danger, flag, hint};
 use crate::message::Message;
 use crate::state::{Brhap, Flag};
 
@@ -98,10 +98,7 @@ pub(crate) fn screen(state: &Brhap) -> Column<'_, Message> {
                 .spacing(8)
                 .align_y(Center),
             )
-            .push(link(
-                if state.show_preview { "hide details".to_string() } else { "details".to_string() },
-                Some(Message::TogglePreview),
-            ));
+            .push(disclosure(state.show_preview));
 
         if !state.launch_error.is_empty() {
             page = page.push(text(state.launch_error.clone()).size(12).color(TROUBLE));
@@ -113,6 +110,28 @@ pub(crate) fn screen(state: &Brhap) -> Column<'_, Message> {
     }
 
     page
+}
+
+/// The command line preview is a detail, not a section, so it gets a
+/// disclosure control rather than a heading. The chevron is what says it can be
+/// opened; the bare text button it replaced said nothing at all.
+///
+/// The font has chevron-right and chevron-up but no chevron-down, so closed
+/// points right and open points up.
+fn disclosure(open: bool) -> Element<'static, Message> {
+    let chevron = if open { bootstrap::chevron_up() } else { bootstrap::chevron_right() };
+
+    button(
+        row![
+            chevron.size(12.0).line_height(1.0),
+            text(if open { "hide details" } else { "details" }).size(12),
+        ]
+        .spacing(6)
+        .align_y(Center),
+    )
+    .style(button::secondary)
+    .on_press(Message::TogglePreview)
+    .into()
 }
 
 /// Icon-only, so each control says what it does on hover.

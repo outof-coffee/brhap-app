@@ -16,6 +16,9 @@ use iced_aw::{TabBar, TabLabel};
 use crate::message::Message;
 use crate::state::{Brhap, Flag, Screen};
 
+/// Glyphs read at a glance, so they sit a little above the body text size.
+pub(crate) const GLYPH: f32 = 20.0;
+
 /// The web UI's #a33, used for anything the user needs to notice.
 pub(crate) const TROUBLE: Color = Color::from_rgb(0.667, 0.2, 0.2);
 /// A dark wash of TROUBLE, backing the unmet requirements panel. Sits just
@@ -99,15 +102,6 @@ pub(crate) fn action(label: String, message: Option<Message>) -> Element<'static
 /// A destructive action, matching `.destructive` in the web UI.
 pub(crate) fn danger(label: String, message: Option<Message>) -> Element<'static, Message> {
     let mut control = button(text(label).size(12)).style(button::danger);
-    if let Some(message) = message {
-        control = control.on_press(message);
-    }
-    control.into()
-}
-
-/// The same thing drawn as a link, matching `.link` in the web UI.
-pub(crate) fn link(label: String, message: Option<Message>) -> Element<'static, Message> {
-    let mut control = button(text(label).size(12)).style(button::text);
     if let Some(message) = message {
         control = control.on_press(message);
     }

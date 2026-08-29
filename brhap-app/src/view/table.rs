@@ -1,16 +1,13 @@
-//! The mod table. Four typed cells per row, no text stretch.
+//! The tables. Typed cells per row, no text stretch.
 
 use iced::widget::text::Text;
 use iced::widget::{button, checkbox, container, table, text, tooltip};
-use iced::{Center, Color, Element, Fill};
+use iced::{Center, Color, Element, Fill, Length};
 use iced_fonts::bootstrap;
 
-use super::{CAUTION, GOOD, TROUBLE};
+use super::{CAUTION, GLYPH, GOOD, TROUBLE};
 use crate::message::Message;
-use crate::state::{Brhap, Row, ProfileRow, Status};
-
-/// Glyphs read at a glance, so they sit a little above the body text size.
-const GLYPH: f32 = 20.0;
+use crate::state::{Brhap, ProfileRow, Row, Status};
 
 /// Alignment belongs to the column, not to a wrapper inside the cell. The
 /// pencil sits in a button and is therefore the tallest cell, so it sets the
@@ -30,12 +27,19 @@ pub(crate) fn mods(state: &Brhap) -> Element<'_, Message> {
     .into()
 }
 
+/// The summary is the longer of the two text columns, so it gets the larger
+/// share of whatever width is left after the two icon columns.
 pub(crate) fn profiles(state: &Brhap) -> Element<'_, Message> {
     table(
         [
-            table::column(text(""), select_profile).width(30).align_x(Center).align_y(Center),
-            table::column(text("Profile"), profile_name).width(Fill),
-            table::column(text("Summary"), profile_summary).width(Fill),
+            table::column(text(""), profile_load).width(40).align_x(Center).align_y(Center),
+            table::column(text("Profile"), profile_name)
+                .width(Length::FillPortion(1))
+                .align_y(Center),
+            table::column(text("Summary"), profile_summary)
+                .width(Length::FillPortion(2))
+                .align_y(Center),
+            table::column(text(""), profile_remove).width(40).align_x(Center).align_y(Center),
         ],
         state.profile_rows(),
     )
@@ -44,21 +48,36 @@ pub(crate) fn profiles(state: &Brhap) -> Element<'_, Message> {
     .into()
 }
 
-pub(crate) fn profile_name(row: ProfileRow) -> Element<'static, Message> {
+/// Loading a profile is what clicking its name used to do. An arrow into a box
+/// says so without the name having to look like a link.
+fn profile_load(row: ProfileRow) -> Element<'static, Message> {
+    tooltip(
+        button(bootstrap::box_arrow_in_right().size(GLYPH).line_height(1.0))
+            .style(button::text)
+            .on_press(Message::ApplyProfile(row.name)),
+        container(text("Load this profile").size(12)).padding(6).style(container::rounded_box),
+        tooltip::Position::Right,
+    )
+    .into()
+}
+
+fn profile_name(row: ProfileRow) -> Element<'static, Message> {
     text(row.name).size(14).into()
 }
 
-// TODO: use the planned arrow right into box glyph and correct action
-pub(crate) fn select_profile(row: ProfileRow) -> Element<'static, Message> {
-    let name = row.name.clone();
-    checkbox(false)
-        .size(15)
-        .into()
+fn profile_summary(row: ProfileRow) -> Element<'static, Message> {
+    text(row.summary).size(12).into()
 }
 
-// TODO: use real summary
-pub(crate) fn profile_summary(row: ProfileRow) -> Element<'static, Message> {
-    text(row.summary).size(14).into()
+fn profile_remove(row: ProfileRow) -> Element<'static, Message> {
+    tooltip(
+        button(bootstrap::trash().size(GLYPH).line_height(1.0).color(TROUBLE))
+            .style(button::text)
+            .on_press(Message::DeleteProfile(row.name)),
+        container(text("Delete this profile").size(12)).padding(6).style(container::rounded_box),
+        tooltip::Position::Left,
+    )
+    .into()
 }
 
 fn select(row: Row) -> Element<'static, Message> {

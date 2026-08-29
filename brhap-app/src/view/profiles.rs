@@ -1,12 +1,11 @@
 //! The profiles screen, following App.svelte:439-472.
 
-use brhap_core::LaunchOptions;
-use iced::widget::{Column, row, text, text_input};
 use iced::Center;
+use iced::widget::{Column, row, text, text_input};
 
-use super::{TROUBLE, action, danger, hint, link};
+use super::{TROUBLE, action};
 use crate::message::Message;
-use crate::state::{Brhap, Flag};
+use crate::state::{Brhap, describe};
 
 pub(crate) fn screen(state: &Brhap) -> Column<'_, Message> {
     let mut page = Column::new().spacing(10).push(text("Save the last launch").size(16));
@@ -44,35 +43,5 @@ pub(crate) fn screen(state: &Brhap) -> Column<'_, Message> {
         return page.push(text("Nothing saved yet.").size(13));
     }
 
-    for profile in &state.store.profiles {
-        page = page.push(
-            row![
-                link(profile.name.clone(), Some(Message::ApplyProfile(profile.name.clone()))),
-                hint(describe(&profile.ids, &profile.options)),
-                danger("delete".to_string(), Some(Message::DeleteProfile(profile.name.clone()))),
-            ]
-            .spacing(8)
-            .align_y(Center),
-        );
-    }
-
-    page
-}
-
-/// One-line summary of a saved launch, following `describe` in App.svelte:121.
-fn describe(ids: &[String], options: &LaunchOptions) -> String {
-    let flags: Vec<&str> = [
-        (options.no_splash, Flag::NoSplash.label()),
-        (options.skip_intro, Flag::SkipIntro.label()),
-        (options.empty_world, Flag::EmptyWorld.label()),
-    ]
-    .into_iter()
-    .filter_map(|(on, label)| on.then_some(label))
-    .collect();
-
-    if flags.is_empty() {
-        format!("{} mod(s)", ids.len())
-    } else {
-        format!("{} mod(s), {}", ids.len(), flags.join(" "))
-    }
+    page.push(super::table::profiles(state))
 }
