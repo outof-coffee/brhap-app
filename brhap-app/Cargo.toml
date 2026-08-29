@@ -1,6 +1,6 @@
 [package]
 name = "brhap-app"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2024"
 
 [dependencies]
@@ -11,3 +11,4 @@ iced = { version = "0.14", features = ["image"] }
 iced_aw = { version = "0.14", default-features = false, features = ["tab_bar"] }
 iced_fonts = { version = "0.3", features = ["bootstrap"] }
 rfd = "0.17"
+
