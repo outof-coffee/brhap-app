@@ -5,7 +5,7 @@ use iced::widget::{Column, button, container, row, scrollable, text, tooltip};
 use iced::{Border, Center, Element, Fill};
 use iced_fonts::bootstrap;
 
-use super::{TROUBLE, TROUBLE_HEADING, TROUBLE_WASH, action, danger, flag, hint};
+use super::{GOOD, TROUBLE, TROUBLE_HEADING, TROUBLE_WASH, action, danger, flag, hint};
 use crate::message::Message;
 use crate::state::{Brhap, Flag};
 
@@ -155,6 +155,25 @@ fn tool(
     .into()
 }
 
+/// Says a key is there, not that it works. Nothing has asked Steam whether it
+/// is any good, so the wording claims only what is known.
+///
+/// A report rather than a control, so it is a bare glyph with no button around
+/// it and no message behind it.
+fn key_present() -> Element<'static, Message> {
+    tooltip(
+        bootstrap::steam().size(15.0).line_height(1.0).color(GOOD),
+        container(text("A Steam Web API key is set").size(12))
+            .padding(6)
+            .style(container::rounded_box),
+        tooltip::Position::Bottom,
+    )
+    .into()
+}
+
+/// Built up rather than written as one `row!`, because the key glyph is only
+/// there some of the time. It sits ahead of the note so it keeps its place
+/// beside the buttons instead of riding on the end of a line that grows.
 fn toolbar(state: &Brhap) -> Element<'_, Message> {
     let idle = !state.rescanning;
     let refresh = if state.api_available {
@@ -163,7 +182,7 @@ fn toolbar(state: &Brhap) -> Element<'_, Message> {
         "Rescan installed mods"
     };
 
-    row![
+    let mut bar = row![
         tool(
             bootstrap::arrow_clockwise(),
             refresh,
@@ -183,9 +202,13 @@ fn toolbar(state: &Brhap) -> Element<'_, Message> {
             true,
             idle.then_some(Message::ResetCache),
         ),
-        hint(state.rescan_note.clone()),
     ]
     .spacing(6)
-    .align_y(Center)
-    .into()
+    .align_y(Center);
+
+    if state.api_available {
+        bar = bar.push(key_present());
+    }
+
+    bar.push(hint(state.rescan_note.clone())).into()
 }

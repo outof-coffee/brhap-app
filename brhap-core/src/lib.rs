@@ -13,16 +13,22 @@
 //! Blocking, like the library underneath. Callers decide for themselves how to
 //! get this off their UI thread.
 
+pub mod settings;
+mod steam;
+
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 
+pub use brhap_server::api::KEY_VAR;
 pub use brhap_server::launch::{LaunchOptions, LaunchPlan, Symlink};
 pub use brhap_server::profiles::{LastLaunch, Profile, Profiles};
 pub use brhap_server::resolve::{Resolved, Source};
 pub use brhap_server::session::{Event, Launched, Listener};
 pub use brhap_server::steam::{Located, SteamPaths};
+pub use settings::{Settings, SettingsRow, settings_rows, stored_steam_key};
+use settings::*;
 
 /// Per-mod replacement directories, keyed by workshop id.
 pub type Overrides = BTreeMap<String, std::path::PathBuf>;
@@ -34,6 +40,9 @@ pub struct Snapshot {
     pub mods: Vec<Resolved>,
     pub referenced: Vec<Resolved>,
     pub api_available: bool,
+    /// True when a saved key is in force and an environment key is set too, so
+    /// the environment one is going unused without saying so.
+    pub key_shadows_env: bool,
     /// False when a path was guessed rather than confirmed on disk.
     pub game_verified: bool,
     pub workshop_verified: bool,
@@ -57,6 +66,7 @@ pub struct Core {
     session: Arc<brhap_server::session::Session>,
     paths: SteamPaths,
     profiles: Mutex<brhap_server::profiles::ProfileStore>,
+    settings: Mutex<SettingsStore>
 }
 
 impl Core {
@@ -78,6 +88,7 @@ impl Core {
             profiles: Mutex::new(brhap_server::profiles::ProfileStore::new(
                 brhap_server::config::profiles_file(),
             )),
+            settings: Mutex::new(SettingsStore::new(settings_file())),
         }
     }
 
@@ -103,7 +114,8 @@ impl Core {
         Snapshot {
             mods,
             referenced: referenced.into_values().collect(),
-            api_available: brhap_server::api::load_steam_key().is_some(),
+            api_available: self.steam_key().is_some(),
+            key_shadows_env: self.key_shadows_env(),
             game_verified: self.paths.game.verified,
             workshop_verified: self.paths.workshop.verified,
         }
@@ -130,12 +142,33 @@ impl Core {
         locked(&self.resolver).resolve(id, refresh).map_err(|error| error.to_string())
     }
 
-    /// Batched walk over the Steam Web API. Needs `STEAM_KEY` in the
-    /// environment; `Snapshot::api_available` says whether it is there.
+    /// The Steam Web API key, saved settings first and the environment second.
+    ///
+    /// The two sources are resolved here rather than in
+    /// `brhap_server::api::load_steam_key`, which reads the environment and
+    /// knows nothing about settings: the store lives in this crate, one layer
+    /// above that one.
+    pub fn steam_key(&self) -> Option<String> {
+        stored_steam_key(&locked(&self.settings).view())
+            .or_else(brhap_server::api::load_steam_key)
+    }
+
+    /// Whether the saved key is standing in front of an environment one.
+    ///
+    /// Reports on the precedence `steam_key` applies, so the two stay in step:
+    /// this is true exactly when that method returns the saved key and there
+    /// was an environment key it passed over.
+    pub fn key_shadows_env(&self) -> bool {
+        stored_steam_key(&locked(&self.settings).view()).is_some()
+            && brhap_server::api::load_steam_key().is_some()
+    }
+
+    /// Batched walk over the Steam Web API. Needs a key from either source;
+    /// `Snapshot::api_available` says whether there is one.
     pub fn walk_all(&self) -> Result<WalkSummary, String> {
-        let Some(key) = brhap_server::api::load_steam_key() else {
+        let Some(key) = self.steam_key() else {
             return Err(format!(
-                "{} is not set, the batched walk is unavailable",
+                "no Steam Web API key is saved or set in {}, the batched walk is unavailable",
                 brhap_server::api::KEY_VAR
             ));
         };
@@ -160,6 +193,8 @@ impl Core {
         options: LaunchOptions,
         overrides: &Overrides,
     ) -> Result<Launched, String> {
+        // try to save settings, but continue if not
+        let _ = locked(&self.settings).save();
         let plan = self.preview(ids, options, overrides);
         let launched = self
             .session
@@ -188,9 +223,27 @@ impl Core {
     pub fn list_profiles(&self) -> Profiles {
         locked(&self.profiles).view()
     }
+    
+    pub fn settings(&self) -> Settings {
+        locked(&self.settings).view()
+    }
 
     /// Each of these returns the whole store, so a caller restates rather than
     /// patches.
+    pub fn save_steam_key(&self, key: &str) -> Result<Settings, String> {
+        let mut store = locked(&self.settings);
+        // todo: handle steam_id detection / ingress
+        store.save_steam_key(0, key.to_string()).map_err(|error| error.to_string())?;
+        Ok(store.view())
+    }
+    
+    pub fn clear_steam_key(&self) -> Result<Settings, String> {
+        let mut store = locked(&self.settings);
+        // todo: handle steam_id detection / ingress
+        store.clear_steam_key(0).map_err(|error| error.to_string())?;
+        Ok(store.view())
+    }
+
     pub fn save_profile(&self, name: &str) -> Result<Profiles, String> {
         let mut store = locked(&self.profiles);
         store.save_named(name).map_err(|error| error.to_string())?;
@@ -202,4 +255,6 @@ impl Core {
         store.delete(name).map_err(|error| error.to_string())?;
         Ok(store.view())
     }
+
+    // todo: save verification of paths
 }

@@ -2,6 +2,7 @@
 
 mod launch;
 mod profiles;
+mod settings;
 mod table;
 
 use brhap_core::LaunchOptions;
@@ -36,6 +37,7 @@ pub(crate) fn view(state: &Brhap) -> Element<'_, Message> {
     let body = match state.screen {
         Screen::Launch => launch::screen(state),
         Screen::Profiles => profiles::screen(state),
+        Screen::Settings => settings::screen(state),
     };
 
     column![header(state), tabs(state), body].spacing(10).padding(20).into()
@@ -69,6 +71,7 @@ fn tabs(state: &Brhap) -> Element<'_, Message> {
     TabBar::new(Message::Show)
         .push(Screen::Launch, TabLabel::Text("Launch".to_string()))
         .push(Screen::Profiles, TabLabel::Text("Profiles".to_string()))
+        .push(Screen::Settings, TabLabel::Text("Settings".to_string()))
         .set_active_tab(&state.screen)
         .text_size(14.0)
         .into()

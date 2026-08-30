@@ -6,7 +6,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use brhap_core::{Core, Event, LaunchOptions, LaunchPlan, Overrides, Profiles, Resolved, Snapshot};
+use brhap_core::{
+    Core, Event, LaunchOptions, LaunchPlan, Overrides, Profiles, Resolved, Settings, SettingsRow,
+    Snapshot,
+};
 use iced::Task;
 
 use crate::events::Outbox;
@@ -36,6 +39,8 @@ pub(crate) struct Brhap {
     pub(crate) plan: Option<LaunchPlan>,
     pub(crate) show_preview: bool,
     pub(crate) api_available: bool,
+    /// A saved key is in force with an environment key set behind it.
+    pub(crate) key_shadows_env: bool,
     pub(crate) load_error: String,
     /// True while a refresh is in flight, which disables the toolbar.
     pub(crate) rescanning: bool,
@@ -54,12 +59,23 @@ pub(crate) struct Brhap {
     pub(crate) profile_error: String,
     /// What the last applied profile did, shown in the header.
     pub(crate) apply_note: String,
+
+    pub(crate) settings: Settings,
+    /// What has been typed into the key editor, kept apart from the stored
+    /// value so a cancelled edit changes nothing.
+    pub(crate) key_input: String,
+    /// Whether the key editor is open, which is what the drop down reads.
+    pub(crate) editing_key: bool,
+    /// Whether the editor shows the key rather than masking it.
+    pub(crate) reveal_key: bool,
+    pub(crate) settings_error: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Screen {
     Launch,
     Profiles,
+    Settings,
 }
 
 /// What a row has to say about itself.
@@ -156,6 +172,7 @@ impl Brhap {
             plan: None,
             show_preview: false,
             api_available: false,
+            key_shadows_env: false,
             load_error: String::new(),
             rescanning: false,
             rescan_note: String::new(),
@@ -168,6 +185,11 @@ impl Brhap {
             profile_name: String::new(),
             profile_error: String::new(),
             apply_note: String::new(),
+            settings: Settings::default(),
+            key_input: String::new(),
+            editing_key: false,
+            reveal_key: false,
+            settings_error: String::new(),
         }
     }
 
@@ -177,6 +199,7 @@ impl Brhap {
     pub(crate) fn absorb_snapshot(&mut self, snapshot: Snapshot) {
         self.mod_ids = snapshot.mods.iter().map(|item| item.id.clone()).collect();
         self.api_available = snapshot.api_available;
+        self.key_shadows_env = snapshot.key_shadows_env;
         for item in snapshot.mods.into_iter().chain(snapshot.referenced) {
             self.items.insert(item.id.clone(), item);
         }
@@ -288,6 +311,13 @@ impl Brhap {
                 summary: describe(&profile.ids, &profile.options),
             })
             .collect()
+    }
+
+    /// The settings table's rows, built from the loaded copy. The core names
+    /// each setting and says what it holds, so the view renders a row rather
+    /// than describing one.
+    pub(crate) fn settings_rows(&self) -> Vec<SettingsRow> {
+        brhap_core::settings_rows(&self.settings)
     }
 
     /// Requirements of the selected mods that will not be loaded as things

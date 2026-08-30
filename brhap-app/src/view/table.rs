@@ -1,8 +1,10 @@
 //! The tables. Typed cells per row, no text stretch.
 
+use brhap_core::SettingsRow;
 use iced::widget::text::Text;
-use iced::widget::{button, checkbox, container, table, text, tooltip};
+use iced::widget::{button, checkbox, container, row, table, text, text_input, tooltip};
 use iced::{Center, Color, Element, Fill, Length};
+use iced_aw::widget::drop_down::{Alignment, DropDown, Offset};
 use iced_fonts::bootstrap;
 
 use super::{CAUTION, GLYPH, GOOD, TROUBLE};
@@ -46,6 +48,112 @@ pub(crate) fn profiles(state: &Brhap) -> Element<'_, Message> {
     .padding_x(6)
     .padding_y(4)
     .into()
+}
+
+/// The core names each setting and says what it holds. The value column takes
+/// the larger share, since it is where the editor opens from.
+pub(crate) fn settings(state: &Brhap) -> Element<'_, Message> {
+    table(
+        [
+            table::column(text("Setting"), setting_name)
+                .width(Length::FillPortion(1))
+                .align_y(Center),
+            table::column(text("Value"), setting_value)
+                .width(Length::FillPortion(2))
+                .align_y(Center),
+            table::column(text(""), |_row: SettingsRow| setting_edit(state))
+                .width(40)
+                .align_x(Center)
+                .align_y(Center),
+            table::column(text(""), setting_clear).width(40).align_x(Center).align_y(Center),
+        ],
+        state.settings_rows(),
+    )
+    .padding_x(6)
+    .padding_y(4)
+    .into()
+}
+
+/// The description is what the setting is for, which is worth a sentence but
+/// not a column of its own.
+///
+/// This cell and the value beside it build owned widgets, but every column in
+/// a table shares one lifetime, and the editor column borrows state. So both
+/// take whatever lifetime that turns out to be rather than insisting on
+/// `'static` the way the mod and profile cells do.
+fn setting_name<'a>(row: SettingsRow) -> Element<'a, Message> {
+    tooltip(
+        text(row.name).size(14),
+        container(text(row.description).size(12)).padding(6).style(container::rounded_box),
+        tooltip::Position::Right,
+    )
+    .into()
+}
+
+/// A stored value is reported as present and never shown. The run of stars is
+/// a fixed length, so it says nothing about the value behind it either.
+fn setting_value<'a>(row: SettingsRow) -> Element<'a, Message> {
+    match row.value {
+        Some(_) => text("********").size(13).into(),
+        None => text("not set").size(13).into(),
+    }
+}
+
+/// Forgetting the saved value, which is only something to offer once there is
+/// one. With nothing stored the glyph stays dull and takes no press, rather
+/// than inviting a click that would do nothing.
+fn setting_clear<'a>(row: SettingsRow) -> Element<'a, Message> {
+    let glyph = bootstrap::trash().size(GLYPH).line_height(1.0);
+    let Some(_) = row.value else {
+        return button(glyph).style(button::text).into();
+    };
+
+    tooltip(
+        button(glyph.color(TROUBLE)).style(button::text).on_press(Message::ClearSteamKey),
+        container(text("Forget this value").size(12)).padding(6).style(container::rounded_box),
+        tooltip::Position::Left,
+    )
+    .into()
+}
+
+/// The editor hangs off the pencil rather than taking over the screen. It is
+/// end-aligned because the pencil is the last column, so an overlay wider than
+/// the button has to grow inward.
+///
+/// The input is masked unless the reveal is on, which is the only way to check
+/// a pasted key without it sitting on screen afterwards.
+fn setting_edit(state: &Brhap) -> Element<'_, Message> {
+    let pencil = button(bootstrap::pencil().size(GLYPH).line_height(1.0))
+        .style(button::text)
+        .on_press(Message::EditSteamKey);
+
+    let reveal = if state.reveal_key { bootstrap::eye_slash() } else { bootstrap::eye() };
+
+    let editor = container(
+        row![
+            text_input("paste the key", &state.key_input)
+                .on_input(Message::KeyInput)
+                .on_submit(Message::CommitSteamKey)
+                .secure(!state.reveal_key)
+                .size(13)
+                .width(Fill),
+            button(reveal.size(GLYPH).line_height(1.0))
+                .style(button::text)
+                .on_press(Message::ToggleReveal),
+            super::action("save".to_string(), Some(Message::CommitSteamKey)),
+        ]
+        .spacing(6)
+        .align_y(Center),
+    )
+    .padding(10)
+    .style(container::rounded_box);
+
+    DropDown::new(pencil, editor, state.editing_key)
+        .width(320)
+        .alignment(Alignment::BottomEnd)
+        .offset(Offset::new(0.0, 4.0))
+        .on_dismiss(Message::CancelKeyEdit)
+        .into()
 }
 
 /// Loading a profile is what clicking its name used to do. An arrow into a box

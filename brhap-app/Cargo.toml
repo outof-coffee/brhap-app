@@ -1,14 +1,15 @@
 [package]
 name = "brhap-app"
-version = "0.3.0"
+version = "0.3.5"
 edition = "2024"
 
 [dependencies]
 brhap-core = { version = "0.1.0", path = "../brhap-core" }
 iced = { version = "0.14", features = ["image"] }
-# Stripped to the tab bar. The defaults drag in chrono, num-format and
-# num-traits through the date, time and number widgets we do not use.
-iced_aw = { version = "0.14", default-features = false, features = ["tab_bar"] }
+# Stripped to the tab bar and the drop down. The defaults drag in chrono,
+# num-format and num-traits through the date, time and number widgets we do
+# not use, and neither of these two pulls any of that in.
+iced_aw = { version = "0.14", default-features = false, features = ["tab_bar", "drop_down"] }
 iced_fonts = { version = "0.3", features = ["bootstrap"] }
 rfd = "0.17"
 

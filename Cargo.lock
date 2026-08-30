@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "brhap-app"
-version = "0.3.0"
+version = "0.3.5"
 dependencies = [
  "brhap-core",
  "iced",
@@ -489,6 +489,7 @@ version = "0.1.0"
 dependencies = [
  "brhap-server",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
