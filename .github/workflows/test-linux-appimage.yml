@@ -16,6 +16,7 @@ jobs:
     runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     env:
       TRIPLE: ${{ inputs.arch == 'arm64' && 'aarch64-unknown-linux-gnu' || 'x86_64-unknown-linux-gnu' }}
+      APPIMAGE_EXTRACT_AND_RUN: 1
     steps:
       - uses: actions/checkout@v4
 
@@ -68,7 +69,7 @@ jobs:
       # finished AppImage is copied out to /work afterward.
       - name: Package AppImage
         run: |
-          docker run --rm --cap-add SYS_ADMIN --device /dev/fuse \
+          docker run --rm --cap-add SYS_ADMIN --device /dev/fuse -e APPIMAGE_EXTRACT_AND_RUN \
             -v "$(pwd)":/work brhap-linux-builder \
             sh -c "cargo packager -f appimage -c packager-linux.toml && cp /root/appimage-out/*.AppImage target/$TRIPLE/release/"
 

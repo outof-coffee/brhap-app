@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 \
     libxcb1 \
     libvulkan1 \
+    libfuse2 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN cargo install cargo-packager --locked --version 0.11.8
