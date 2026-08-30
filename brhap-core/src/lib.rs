@@ -26,6 +26,7 @@ pub use brhap_server::profiles::{LastLaunch, Profile, Profiles};
 pub use brhap_server::resolve::{Resolved, Source};
 pub use brhap_server::session::{Event, Launched, Listener};
 pub use brhap_server::steam::{Located, SteamPaths};
+pub use settings::{Settings, SettingsRow, settings_rows};
 use settings::*;
 
 /// Per-mod replacement directories, keyed by workshop id.
@@ -197,7 +198,7 @@ impl Core {
         locked(&self.profiles).view()
     }
     
-    pub fn settings(&self) -> Settings { 
+    pub fn settings(&self) -> Settings {
         locked(&self.settings).view()
     }
 

@@ -195,16 +195,24 @@ pub(crate) fn update(state: &mut Brhap, message: Message) -> Task<Message> {
         }
         Message::Show(screen) => {
             state.screen = screen;
-            if screen != Screen::Profiles {
-                return Task::none();
-            }
-            state.profile_error.clear();
+            match screen {
+                Screen::Launch => Task::none(),
+                Screen::Profiles => {
+                    state.profile_error.clear();
 
-            let core = Arc::clone(&state.core);
-            Task::perform(
-                work::blocking(move || Ok::<_, String>(core.list_profiles())),
-                Message::Stored,
-            )
+                    let core = Arc::clone(&state.core);
+                    Task::perform(
+                        work::blocking(move || Ok::<_, String>(core.list_profiles())),
+                        Message::Stored,
+                    )
+                }
+                Screen::Settings => {
+                    state.settings_error.clear();
+
+                    let core = Arc::clone(&state.core);
+                    Task::perform(work::blocking(move || core.settings()), Message::SettingsLoaded)
+                }
+            }
         }
         Message::ProfileName(name) => {
             state.profile_name = name;
@@ -235,6 +243,56 @@ pub(crate) fn update(state: &mut Brhap, message: Message) -> Task<Message> {
         }
         Message::Stored(Err(message)) | Message::Saved(Err(message)) => {
             state.profile_error = message;
+            Task::none()
+        }
+        // The editor opens empty rather than holding the stored key, so what is
+        // typed is always the whole of what gets saved.
+        Message::EditSteamKey => {
+            state.settings_error.clear();
+            state.key_input.clear();
+            state.reveal_key = false;
+            state.editing_key = true;
+            Task::none()
+        }
+        Message::KeyInput(key) => {
+            state.key_input = key;
+            Task::none()
+        }
+        Message::ToggleReveal => {
+            state.reveal_key = !state.reveal_key;
+            Task::none()
+        }
+        Message::CancelKeyEdit => {
+            state.editing_key = false;
+            state.reveal_key = false;
+            state.key_input.clear();
+            Task::none()
+        }
+        Message::CommitSteamKey => {
+            state.settings_error.clear();
+
+            let core = Arc::clone(&state.core);
+            let key = state.key_input.clone();
+            Task::perform(
+                work::blocking(move || core.save_steam_key(&key)),
+                Message::SettingsSaved,
+            )
+        }
+        Message::SettingsLoaded(settings) => {
+            state.settings = settings;
+            Task::none()
+        }
+        Message::SettingsSaved(Ok(settings)) => {
+            state.settings = settings;
+            state.editing_key = false;
+            state.reveal_key = false;
+            state.key_input.clear();
+            Task::none()
+        }
+        // A rejected save leaves what was typed alone to fix, the way
+        // `Message::Saved` treats the profile name.
+        Message::SettingsSaved(Err(message)) => {
+            state.settings_error = message;
             Task::none()
         }
         Message::ApplyProfile(name) => {

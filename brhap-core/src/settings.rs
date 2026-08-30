@@ -20,6 +20,39 @@ pub struct SteamApiKey {
     pub steam_key: String,
 }
 
+/// One line of the settings table. The core decides what a setting is called
+/// and how it describes itself, so a frontend renders the row rather than
+/// naming it. `value` is `None` when nothing is stored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettingsRow {
+    pub name: String,
+    pub description: String,
+    pub value: Option<String>,
+}
+
+/// The settings table's rows. One entry for now, and an empty stored key
+/// counts as nothing stored.
+///
+/// Reads a settings value the caller already holds, so a frontend can draw the
+/// table without reaching back through the store.
+///
+/// Keyed on steam id 0, the placeholder `set_steam_key` writes under until the
+/// real id can be discovered.
+pub fn settings_rows(store: &Settings) -> Vec<SettingsRow> {
+    let stored = store
+        .steam_keys
+        .iter()
+        .find(|entry| entry.steam_id == 0)
+        .map(|entry| entry.steam_key.clone())
+        .filter(|key| !key.is_empty());
+
+    vec![SettingsRow {
+        name: "Steam API key".to_string(),
+        description: "Steam web API key for enhanced mode".to_string(),
+        value: stored,
+    }]
+}
+
 /// Saved application settings.
 pub fn settings_file() -> PathBuf {
     config_dir().join("settings.json")
