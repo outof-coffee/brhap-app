@@ -39,6 +39,8 @@ pub(crate) struct Brhap {
     pub(crate) plan: Option<LaunchPlan>,
     pub(crate) show_preview: bool,
     pub(crate) api_available: bool,
+    /// A saved key is in force with an environment key set behind it.
+    pub(crate) key_shadows_env: bool,
     pub(crate) load_error: String,
     /// True while a refresh is in flight, which disables the toolbar.
     pub(crate) rescanning: bool,
@@ -170,6 +172,7 @@ impl Brhap {
             plan: None,
             show_preview: false,
             api_available: false,
+            key_shadows_env: false,
             load_error: String::new(),
             rescanning: false,
             rescan_note: String::new(),
@@ -196,6 +199,7 @@ impl Brhap {
     pub(crate) fn absorb_snapshot(&mut self, snapshot: Snapshot) {
         self.mod_ids = snapshot.mods.iter().map(|item| item.id.clone()).collect();
         self.api_available = snapshot.api_available;
+        self.key_shadows_env = snapshot.key_shadows_env;
         for item in snapshot.mods.into_iter().chain(snapshot.referenced) {
             self.items.insert(item.id.clone(), item);
         }
