@@ -222,6 +222,13 @@ impl Core {
         Ok(store.view())
     }
     
+    pub fn clear_steam_key(&self) -> Result<Settings, String> {
+        let mut store = locked(&self.settings);
+        // todo: handle steam_id detection / ingress
+        store.clear_steam_key(0).map_err(|error| error.to_string())?;
+        Ok(store.view())
+    }
+
     pub fn save_profile(&self, name: &str) -> Result<Profiles, String> {
         let mut store = locked(&self.profiles);
         store.save_named(name).map_err(|error| error.to_string())?;

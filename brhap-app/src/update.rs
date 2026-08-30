@@ -278,6 +278,15 @@ pub(crate) fn update(state: &mut Brhap, message: Message) -> Task<Message> {
                 Message::SettingsSaved,
             )
         }
+        // Answered by the same message a save is, since what follows either
+        // one is the same: the store restated, the editor shut, and a fresh
+        // snapshot.
+        Message::ClearSteamKey => {
+            state.settings_error.clear();
+
+            let core = Arc::clone(&state.core);
+            Task::perform(work::blocking(move || core.clear_steam_key()), Message::SettingsSaved)
+        }
         Message::SettingsLoaded(settings) => {
             state.settings = settings;
             Task::none()

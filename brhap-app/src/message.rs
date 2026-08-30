@@ -47,6 +47,8 @@ pub(crate) enum Message {
     /// Show the key being typed rather than masking it.
     ToggleReveal,
     CommitSteamKey,
+    /// Forget the saved key, leaving whatever the environment holds.
+    ClearSteamKey,
     CancelKeyEdit,
     SettingsLoaded(Settings),
     SettingsSaved(Result<Settings, String>),
