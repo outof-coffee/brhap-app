@@ -1,5 +1,5 @@
 # Build environment for the Linux AppImage. Not a multi-stage build: the
-# repo is bind-mounted in at `run` time (see release-linux.sh), so this
+# repo is bind-mounted in at `run` time (see release-linux-from-macos.sh), so this
 # image only needs the toolchain, not a copy of the source.
 FROM rust:1.88-bookworm
 

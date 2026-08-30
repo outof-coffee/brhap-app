@@ -29,7 +29,7 @@ jobs:
             cargo build --release -p brhap-app --target "$TRIPLE"
 
       # gitignored and regenerated from cargo metadata each run, same as
-      # release-linux.sh does locally - never hand-write or commit this file.
+      # release-linux-from-macos.sh does locally - never hand-write or commit this file.
       - name: Generate packager-linux.toml
         run: |
           VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "brhap-app") | .version')
