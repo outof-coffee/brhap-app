@@ -26,7 +26,7 @@ pub use brhap_server::profiles::{LastLaunch, Profile, Profiles};
 pub use brhap_server::resolve::{Resolved, Source};
 pub use brhap_server::session::{Event, Launched, Listener};
 pub use brhap_server::steam::{Located, SteamPaths};
-pub use settings::{Settings, SettingsRow, settings_rows};
+pub use settings::{Settings, SettingsRow, settings_rows, stored_steam_key};
 use settings::*;
 
 /// Per-mod replacement directories, keyed by workshop id.
@@ -110,7 +110,7 @@ impl Core {
         Snapshot {
             mods,
             referenced: referenced.into_values().collect(),
-            api_available: brhap_server::api::load_steam_key().is_some(),
+            api_available: self.steam_key().is_some(),
             game_verified: self.paths.game.verified,
             workshop_verified: self.paths.workshop.verified,
         }
@@ -137,12 +137,23 @@ impl Core {
         locked(&self.resolver).resolve(id, refresh).map_err(|error| error.to_string())
     }
 
-    /// Batched walk over the Steam Web API. Needs `STEAM_KEY` in the
-    /// environment; `Snapshot::api_available` says whether it is there.
+    /// The Steam Web API key, saved settings first and the environment second.
+    ///
+    /// The two sources are resolved here rather than in
+    /// `brhap_server::api::load_steam_key`, which reads the environment and
+    /// knows nothing about settings: the store lives in this crate, one layer
+    /// above that one.
+    pub fn steam_key(&self) -> Option<String> {
+        stored_steam_key(&locked(&self.settings).view())
+            .or_else(brhap_server::api::load_steam_key)
+    }
+
+    /// Batched walk over the Steam Web API. Needs a key from either source;
+    /// `Snapshot::api_available` says whether there is one.
     pub fn walk_all(&self) -> Result<WalkSummary, String> {
-        let Some(key) = brhap_server::api::load_steam_key() else {
+        let Some(key) = self.steam_key() else {
             return Err(format!(
-                "{} is not set, the batched walk is unavailable",
+                "no Steam Web API key is saved or set in {}, the batched walk is unavailable",
                 brhap_server::api::KEY_VAR
             ));
         };
