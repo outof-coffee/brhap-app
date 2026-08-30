@@ -20,16 +20,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build container image
-        run: docker build -t brhap-linux-builder .
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TRIPLE }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Same package list release-linux-from-macos.sh's Dockerfile installs
+      # for the equivalent macOS-hosted container build. libfuse2 is not
+      # listed - GitHub's Ubuntu runners already ship it.
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            cmake \
+            libwayland-client0 \
+            libwayland-egl1 \
+            libxkbcommon0 \
+            libx11-6 \
+            libx11-xcb1 \
+            libxcb1 \
+            libvulkan1
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked --version 0.11.8
 
       - name: Build brhap-app
-        run: |
-          docker run --rm -v "$(pwd)":/work brhap-linux-builder \
-            cargo build --release -p brhap-app --target "$TRIPLE"
+        run: cargo build --release -p brhap-app --target "$TRIPLE"
 
       # gitignored and regenerated from cargo metadata each run, same as
-      # release-linux-from-macos.sh does locally - never hand-write or commit this file.
+      # release-linux-from-macos.sh does locally - never hand-write or
+      # commit this file. out-dir is the plain build output dir - there's
+      # no bind mount here to work around, unlike the macOS-hosted
+      # container flow.
       - name: Generate packager-linux.toml
         run: |
           VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "brhap-app") | .version')
@@ -40,8 +65,7 @@ jobs:
           version = "$VERSION"
           identifier = "coffee.outof.brhap"
           icons = ["brhap-app/assets/icon.png"]
-          out-dir = "/root/appimage-out"
-          binaries-dir = "target/$TRIPLE/release"
+          out-dir = "target/$TRIPLE/release"
 
           [[binaries]]
           path = "brhap-app"
@@ -61,17 +85,8 @@ jobs:
           ]
           EOF
 
-      # --cap-add SYS_ADMIN and --device /dev/fuse are needed for
-      # linuxdeploy's FUSE-based AppImage extraction step. out-dir points
-      # at the container's own filesystem, not the bind-mounted /work,
-      # since cargo-packager's internal file-copy step fails on bind mounts
-      # that don't support the efficient-copy syscalls it tries - the
-      # finished AppImage is copied out to /work afterward.
       - name: Package AppImage
-        run: |
-          docker run --rm --cap-add SYS_ADMIN --device /dev/fuse -e APPIMAGE_EXTRACT_AND_RUN \
-            -v "$(pwd)":/work brhap-linux-builder \
-            sh -c "cargo packager -f appimage -c packager-linux.toml && cp /root/appimage-out/*.AppImage target/$TRIPLE/release/"
+        run: cargo packager -f appimage -c packager-linux.toml
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
