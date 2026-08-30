@@ -100,6 +100,13 @@ pub fn set_steam_key(store: &mut Settings, steam_id: i64, key: String) -> Result
     }
 }
 
+/// Forget the key held for one steam id. The entry goes rather than being
+/// blanked, so nothing is left behind in the saved file.
+pub fn clear_steam_key(store: &mut Settings, steam_id: i64) -> Result<(), SettingsError> {
+    store.steam_keys.retain(|entry| entry.steam_id != steam_id);
+    Ok(())
+}
+
 pub struct SettingsStore {
     path: PathBuf,
     data: Settings,
@@ -153,6 +160,12 @@ impl SettingsStore {
     pub fn save_steam_key(&mut self, _steam_id: i64, key: String) -> Result<(), SettingsError> {
         // todo: implement steam_id info gathering
         set_steam_key(&mut self.data, 0, key)?;
+        self.save()
+    }
+
+    pub fn clear_steam_key(&mut self, _steam_id: i64) -> Result<(), SettingsError> {
+        // todo: implement steam_id info gathering
+        clear_steam_key(&mut self.data, 0)?;
         self.save()
     }
 

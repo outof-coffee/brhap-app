@@ -65,6 +65,7 @@ pub(crate) fn settings(state: &Brhap) -> Element<'_, Message> {
                 .width(40)
                 .align_x(Center)
                 .align_y(Center),
+            table::column(text(""), setting_clear).width(40).align_x(Center).align_y(Center),
         ],
         state.settings_rows(),
     )
@@ -96,6 +97,23 @@ fn setting_value<'a>(row: SettingsRow) -> Element<'a, Message> {
         Some(_) => text("********").size(13).into(),
         None => text("not set").size(13).into(),
     }
+}
+
+/// Forgetting the saved value, which is only something to offer once there is
+/// one. With nothing stored the glyph stays dull and takes no press, rather
+/// than inviting a click that would do nothing.
+fn setting_clear<'a>(row: SettingsRow) -> Element<'a, Message> {
+    let glyph = bootstrap::trash().size(GLYPH).line_height(1.0);
+    let Some(_) = row.value else {
+        return button(glyph).style(button::text).into();
+    };
+
+    tooltip(
+        button(glyph.color(TROUBLE)).style(button::text).on_press(Message::ClearSteamKey),
+        container(text("Forget this value").size(12)).padding(6).style(container::rounded_box),
+        tooltip::Position::Left,
+    )
+    .into()
 }
 
 /// The editor hangs off the pencil rather than taking over the screen. It is
