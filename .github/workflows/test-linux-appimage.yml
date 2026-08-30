@@ -1,0 +1,79 @@
+name: Test Linux AppImage
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Target architecture
+        type: choice
+        options:
+          - x86_64
+          - arm64
+        default: x86_64
+
+jobs:
+  build-appimage:
+    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    env:
+      TRIPLE: ${{ inputs.arch == 'arm64' && 'aarch64-unknown-linux-gnu' || 'x86_64-unknown-linux-gnu' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build container image
+        run: docker build -t brhap-linux-builder .
+
+      - name: Build brhap-app
+        run: |
+          docker run --rm -v "$(pwd)":/work brhap-linux-builder \
+            cargo build --release -p brhap-app --target "$TRIPLE"
+
+      # gitignored and regenerated from cargo metadata each run, same as
+      # release-linux.sh does locally - never hand-write or commit this file.
+      - name: Generate packager-linux.toml
+        run: |
+          VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "brhap-app") | .version')
+          cat > packager-linux.toml <<EOF
+          # auto-generated - do not commit or edit!
+          name = "brhap-app"
+          product-name = "brhap"
+          version = "$VERSION"
+          identifier = "coffee.outof.brhap"
+          icons = ["brhap-app/assets/icon.png"]
+          out-dir = "/root/appimage-out"
+          binaries-dir = "target/$TRIPLE/release"
+
+          [[binaries]]
+          path = "brhap-app"
+          main = true
+
+          [linux]
+          generate-desktop-entry = true
+
+          [appimage]
+          libs = [
+            "libwayland-client.so.0",
+            "libwayland-egl.so.1",
+            "libxkbcommon.so.0",
+            "libX11.so.6",
+            "libX11-xcb.so.1",
+            "libxcb.so.1",
+          ]
+          EOF
+
+      # --cap-add SYS_ADMIN and --device /dev/fuse are needed for
+      # linuxdeploy's FUSE-based AppImage extraction step. out-dir points
+      # at the container's own filesystem, not the bind-mounted /work,
+      # since cargo-packager's internal file-copy step fails on bind mounts
+      # that don't support the efficient-copy syscalls it tries - the
+      # finished AppImage is copied out to /work afterward.
+      - name: Package AppImage
+        run: |
+          docker run --rm --cap-add SYS_ADMIN --device /dev/fuse \
+            -v "$(pwd)":/work brhap-linux-builder \
+            sh -c "cargo packager -f appimage -c packager-linux.toml && cp /root/appimage-out/*.AppImage target/$TRIPLE/release/"
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: brhap-app-${{ inputs.arch }}-AppImage
+          path: target/${{ env.TRIPLE }}/release/*.AppImage

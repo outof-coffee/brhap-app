@@ -3,3 +3,4 @@ target/
 .idea/
 node_modules/
 packager.toml
+packager-linux.toml
