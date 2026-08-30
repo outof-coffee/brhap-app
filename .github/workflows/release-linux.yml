@@ -106,8 +106,25 @@ jobs:
       - name: Package AppImage
         run: cargo packager -f appimage -c packager-linux.toml
 
+      # Non-interactive: CI has no pinentry, so the passphrase is passed
+      # directly with loopback mode. Publishing the public key anywhere
+      # verifiers can find it is a separate, manual step - not this workflow's
+      # job.
+      - name: Sign AppImage
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_SIGNING_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
+        run: |
+          echo "$GPG_SIGNING_KEY" | gpg --batch --import
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "$GPG_SIGNING_PASSPHRASE" \
+            --detach-sign --armor \
+            target/$TRIPLE/release/*.AppImage
+
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
           name: brhap-app-${{ matrix.arch }}-AppImage
-          path: target/${{ matrix.triple }}/release/*.AppImage
+          path: |
+            target/${{ matrix.triple }}/release/*.AppImage
+            target/${{ matrix.triple }}/release/*.AppImage.asc
