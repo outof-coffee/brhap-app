@@ -282,12 +282,14 @@ pub(crate) fn update(state: &mut Brhap, message: Message) -> Task<Message> {
             state.settings = settings;
             Task::none()
         }
+        // A saved key is one of the two sources `api_available` reports on, so
+        // the snapshot is retaken rather than left until the next refresh.
         Message::SettingsSaved(Ok(settings)) => {
             state.settings = settings;
             state.editing_key = false;
             state.reveal_key = false;
             state.key_input.clear();
-            Task::none()
+            state.reload()
         }
         // A rejected save leaves what was typed alone to fix, the way
         // `Message::Saved` treats the profile name.

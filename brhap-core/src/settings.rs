@@ -30,21 +30,26 @@ pub struct SettingsRow {
     pub value: Option<String>,
 }
 
-/// The settings table's rows. One entry for now, and an empty stored key
-/// counts as nothing stored.
-///
-/// Reads a settings value the caller already holds, so a frontend can draw the
-/// table without reaching back through the store.
+/// The saved Steam Web API key, if there is one worth using. Blank counts as
+/// nothing stored, so a key cleared to an empty string reads as absent.
 ///
 /// Keyed on steam id 0, the placeholder `set_steam_key` writes under until the
 /// real id can be discovered.
-pub fn settings_rows(store: &Settings) -> Vec<SettingsRow> {
-    let stored = store
+pub fn stored_steam_key(store: &Settings) -> Option<String> {
+    store
         .steam_keys
         .iter()
         .find(|entry| entry.steam_id == 0)
         .map(|entry| entry.steam_key.clone())
-        .filter(|key| !key.is_empty());
+        .filter(|key| !key.trim().is_empty())
+}
+
+/// The settings table's rows. One entry for now.
+///
+/// Reads a settings value the caller already holds, so a frontend can draw the
+/// table without reaching back through the store.
+pub fn settings_rows(store: &Settings) -> Vec<SettingsRow> {
+    let stored = stored_steam_key(store);
 
     vec![SettingsRow {
         name: "Steam API key".to_string(),
