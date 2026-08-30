@@ -1,30 +1,42 @@
-name: Test Linux AppImage
+name: Release Linux AppImage
 
+# Builds arm64 and x86_64 AppImages when a version tag is pushed, and
+# uploads them as workflow artifacts. Does not create a GitHub Release -
+# that stays a manual step.
 on:
+  push:
+    tags:
+      - 'v*'
+  # Lets a specific tag (or any other ref) be picked from the Actions UI's
+  # "Use workflow from" dropdown, without needing a new tag push.
   workflow_dispatch:
-    inputs:
-      arch:
-        description: Target architecture
-        type: choice
-        options:
-          - x86_64
-          - arm64
-        default: x86_64
 
 jobs:
   build-appimage:
-    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+          - arch: x86_64
+            runs-on: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.runs-on }}
     env:
-      TRIPLE: ${{ inputs.arch == 'arm64' && 'aarch64-unknown-linux-gnu' || 'x86_64-unknown-linux-gnu' }}
+      TRIPLE: ${{ matrix.triple }}
       APPIMAGE_EXTRACT_AND_RUN: 1
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ env.TRIPLE }}
+          targets: ${{ matrix.triple }}
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.arch }}
 
       # Same package list release-linux-from-macos.sh's Dockerfile installs
       # for the equivalent macOS-hosted container build. libfuse2 is not
@@ -60,9 +72,7 @@ jobs:
 
       # gitignored and regenerated from cargo metadata each run, same as
       # release-linux-from-macos.sh does locally - never hand-write or
-      # commit this file. out-dir is the plain build output dir - there's
-      # no bind mount here to work around, unlike the macOS-hosted
-      # container flow.
+      # commit this file.
       - name: Generate packager-linux.toml
         run: |
           VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "brhap-app") | .version')
@@ -99,5 +109,5 @@ jobs:
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: brhap-app-${{ inputs.arch }}-AppImage
-          path: target/${{ env.TRIPLE }}/release/*.AppImage
+          name: brhap-app-${{ matrix.arch }}-AppImage
+          path: target/${{ matrix.triple }}/release/*.AppImage

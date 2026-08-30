@@ -1,6 +1,7 @@
 // use steamworks::{Client, AppId};
 
-fn initialize_steamworks(app_id: i64) {
+#[allow(dead_code)]
+fn initialize_steamworks(_app_id: i64) {
     // let (client, single) match = Client::init_app(AppId(app_id.clone())) {
     //     Ok(result) => result,
     //     Err(e) => {
