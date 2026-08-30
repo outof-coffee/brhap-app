@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use brhap_core::{Launched, Profiles, Resolved, Snapshot};
+use brhap_core::{Launched, Profiles, Resolved, Settings, Snapshot};
 
 use crate::events::Incoming;
 use crate::state::{Flag, Screen};
@@ -41,5 +41,14 @@ pub(crate) enum Message {
     /// Save answers the same way, but is kept separate because only a save
     /// that went through should clear the name field.
     Saved(Result<Profiles, String>),
+    /// Open the key editor.
+    EditSteamKey,
+    KeyInput(String),
+    /// Show the key being typed rather than masking it.
+    ToggleReveal,
+    CommitSteamKey,
+    CancelKeyEdit,
+    SettingsLoaded(Settings),
+    SettingsSaved(Result<Settings, String>),
     Session(Incoming),
 }
