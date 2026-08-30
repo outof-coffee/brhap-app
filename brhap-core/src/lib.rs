@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 
+pub use brhap_server::api::KEY_VAR;
 pub use brhap_server::launch::{LaunchOptions, LaunchPlan, Symlink};
 pub use brhap_server::profiles::{LastLaunch, Profile, Profiles};
 pub use brhap_server::resolve::{Resolved, Source};
@@ -39,6 +40,9 @@ pub struct Snapshot {
     pub mods: Vec<Resolved>,
     pub referenced: Vec<Resolved>,
     pub api_available: bool,
+    /// True when a saved key is in force and an environment key is set too, so
+    /// the environment one is going unused without saying so.
+    pub key_shadows_env: bool,
     /// False when a path was guessed rather than confirmed on disk.
     pub game_verified: bool,
     pub workshop_verified: bool,
@@ -111,6 +115,7 @@ impl Core {
             mods,
             referenced: referenced.into_values().collect(),
             api_available: self.steam_key().is_some(),
+            key_shadows_env: self.key_shadows_env(),
             game_verified: self.paths.game.verified,
             workshop_verified: self.paths.workshop.verified,
         }
@@ -146,6 +151,16 @@ impl Core {
     pub fn steam_key(&self) -> Option<String> {
         stored_steam_key(&locked(&self.settings).view())
             .or_else(brhap_server::api::load_steam_key)
+    }
+
+    /// Whether the saved key is standing in front of an environment one.
+    ///
+    /// Reports on the precedence `steam_key` applies, so the two stay in step:
+    /// this is true exactly when that method returns the saved key and there
+    /// was an environment key it passed over.
+    pub fn key_shadows_env(&self) -> bool {
+        stored_steam_key(&locked(&self.settings).view()).is_some()
+            && brhap_server::api::load_steam_key().is_some()
     }
 
     /// Batched walk over the Steam Web API. Needs a key from either source;
