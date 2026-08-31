@@ -6,7 +6,7 @@
 //! replacement, since the key is optional.
 //!
 //! The keyless `ISteamRemoteStorage` variant is not usable here: it returns no
-//! `children` field at all. See documentation/dependencies-hurdles.md.
+//! `children` field at all.
 
 use std::collections::{BTreeMap, HashSet};
 
