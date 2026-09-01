@@ -70,9 +70,9 @@ fn find_case_insensitive(dir: &std::path::Path, name: &str) -> PathBuf {
 
 /// The game binary inside the macOS app bundle, or the bare binary elsewhere.
 ///
-/// The macOS path is confirmed on a real install. The Linux name is looked up
-/// case-insensitively, since it has never been run here and the real casing
-/// on a Linux box is not yet confirmed.
+/// The Linux name is matched case-insensitively against the real directory
+/// entry, since a case-sensitive filesystem will not match a literal
+/// `dir.join("arma3_x64")` against a differently-cased file.
 ///
 /// `intel_mode` picks the universal `ArmA3.app` build over the default
 /// Apple Silicon native one, for Intel Macs.
