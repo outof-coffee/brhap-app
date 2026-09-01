@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use regex::Regex;
+use steam_vdf_parser::{Value, parse_appinfo};
 
 use crate::ARMA_APP_ID;
 use crate::config::home_dir;
@@ -141,6 +142,93 @@ pub fn discover_in(candidates: &[PathBuf], steam_dir: &Path) -> SteamPaths {
 pub fn discover() -> SteamPaths {
     let steam_dir = default_steam_dir();
     discover_in(&library_candidates(&steam_dir), &steam_dir)
+}
+
+fn appinfo_path(steam_dir: &Path) -> PathBuf {
+    steam_dir.join("appcache").join("appinfo.vdf")
+}
+
+/// The raw appinfo.vdf entry for Arma 3, scoped to just its app id.
+pub fn arma_appinfo_entry(steam_dir: &Path) -> Option<Value<'static>> {
+    let bytes = std::fs::read(appinfo_path(steam_dir)).ok()?;
+    let vdf = parse_appinfo(&bytes).ok()?;
+    let obj = vdf.as_obj()?;
+    let entry = obj.get(ARMA_APP_ID)?;
+    Some(entry.clone().into_owned())
+}
+
+/// The DLC app ids listed in an appinfo.vdf entry's `appinfo.extended.listofdlc`
+/// field, which is a comma-separated string rather than a nested list.
+pub fn listofdlc(entry: &Value) -> Option<Vec<u64>> {
+    let raw = entry
+        .as_obj()?
+        .get("appinfo")?
+        .as_obj()?
+        .get("extended")?
+        .as_obj()?
+        .get("listofdlc")?
+        .as_str()?;
+
+    raw.split(',').filter(|id| !id.is_empty()).map(|id| id.parse().ok()).collect()
+}
+
+fn appid_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"appId\s*=\s*(\d+)").expect("static pattern"))
+}
+
+/// A CDLC id confirmed present via a folder directly under the game
+/// directory, and that folder's actual name (what a -mod= entry would use).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledDlcFolder {
+    pub id: u64,
+    pub folder_name: String,
+}
+
+/// DLC ids confirmed present via a folder directly under the game directory
+/// whose mod.cpp names that id. Contact/Enoch has no mod.cpp, so it is never
+/// found this way.
+pub fn installed_dlc_folders(game_dir: &Path, known_ids: &[u64]) -> Vec<InstalledDlcFolder> {
+    let mut found = Vec::new();
+    let Ok(entries) = std::fs::read_dir(game_dir) else { return found };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(folder_name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+        let Ok(contents) = std::fs::read_to_string(path.join("mod.cpp")) else { continue };
+        let Some(captures) = appid_regex().captures(&contents) else { continue };
+        let Ok(id) = captures[1].parse::<u64>() else { continue };
+        if known_ids.contains(&id) {
+            found.push(InstalledDlcFolder { id, folder_name: folder_name.to_string() });
+        }
+    }
+    found
+}
+
+/// The Contact DLC's real on-disk folder name, case-insensitively matched
+/// and confirmed non-empty, or None if not installed. Returns the actual
+/// captured name rather than a literal, since the real casing on disk is
+/// what -mod= must match exactly on a case-sensitive filesystem. Contact has
+/// no mod.cpp, so it cannot be checked the way other CDLC folders are in
+/// installed_dlc_folders. Not to be confused with Enoch, which is
+/// always-loaded base data and never goes in -mod=.
+pub fn check_contact_dlc(game_dir: &Path) -> Option<String> {
+    let entries = std::fs::read_dir(game_dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+        if name.eq_ignore_ascii_case("contact") {
+            let has_content =
+                std::fs::read_dir(&path).map(|mut inner| inner.next().is_some()).unwrap_or(false);
+            return has_content.then(|| name.to_string());
+        }
+    }
+    None
 }
 
 #[cfg(test)]

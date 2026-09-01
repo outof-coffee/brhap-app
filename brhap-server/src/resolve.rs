@@ -11,9 +11,12 @@ use std::path::PathBuf;
 use serde::Serialize;
 
 use crate::api::{self, WalkResult};
-use crate::cache::{self, Cache, CacheEntry, DepsEntry};
+use crate::cache::{self, Cache, CacheEntry, CacheStatus, DepsEntry};
 use crate::mods::{self, Mod};
+pub use crate::mods::ItemKind;
 use crate::scrape::{self, ScrapeError};
+use crate::steam::{self, SteamPaths};
+use crate::{CONTACT_APP_ID, CONTACT_NAME};
 
 /// Where a piece of knowledge came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -36,10 +39,15 @@ pub struct Resolved {
     pub name: Option<String>,
     pub installed: bool,
     /// None until a fetch has told us. meta.cpp does not carry dependencies.
+    /// DLC always carries Some(empty): it is never resolved from a fetch,
+    /// so absence would otherwise misread as "not yet resolved".
     pub requires: Option<Vec<String>>,
     pub source: Source,
     /// ISO timestamp behind `requires`, empty when never fetched.
     pub fetched_at: String,
+    pub kind: ItemKind,
+    /// What a -mod= entry uses. Only ever Some for Cdlc/Contact.
+    pub folder_name: Option<String>,
 }
 
 pub struct Resolver {
@@ -47,19 +55,28 @@ pub struct Resolver {
     cache: Cache,
     cache_path: PathBuf,
     workshop_dir: PathBuf,
+    paths: SteamPaths,
 }
 
 impl Resolver {
     /// Scan disk, prefill installed names, then load the persisted cache.
-    pub fn new(workshop_dir: PathBuf, cache_path: PathBuf) -> Self {
+    pub fn new(workshop_dir: PathBuf, cache_path: PathBuf, paths: SteamPaths) -> Self {
         let mut resolver =
-            Self { installed: BTreeMap::new(), cache: Cache::default(), cache_path, workshop_dir };
+            Self { installed: BTreeMap::new(), cache: Cache::default(), cache_path, workshop_dir, paths };
         resolver.rescan();
         resolver
     }
 
+    /// A CDLC folder's own mod.cpp carries a display name the same way a
+    /// Workshop mod's meta.cpp does.
+    fn cdlc_name(path: &std::path::Path) -> Option<String> {
+        let text = std::fs::read_to_string(path.join("mod.cpp")).ok()?;
+        mods::parse_config(&text).get("name").cloned()
+    }
+
     /// Re-read the workshop directory and re-merge the cache against it, so a
-    /// mod installed or removed since startup is picked up.
+    /// mod installed or removed since startup is picked up. Also re-detects
+    /// installed DLC the same way, entirely from local disk, no network.
     pub fn rescan(&mut self) {
         self.installed = mods::list_mods(&self.workshop_dir)
             .into_iter()
@@ -67,6 +84,44 @@ impl Resolver {
             .collect();
         let ids: HashSet<String> = self.installed.keys().cloned().collect();
         self.cache = cache::load_cache(&ids, &self.cache_path);
+
+        if let Some(entry) = steam::arma_appinfo_entry(&self.paths.steam_dir)
+            && let Some(known_ids) = steam::listofdlc(&entry)
+        {
+            for folder in steam::installed_dlc_folders(&self.paths.game.path, &known_ids) {
+                let id = folder.id.to_string();
+                // A real Workshop mod already owns this id: never let a DLC
+                // entry displace it, even though the two id spaces are not
+                // expected to overlap in practice.
+                if self.installed.get(&id).is_some_and(|item| item.kind == ItemKind::Mod) {
+                    continue;
+                }
+                let path = self.paths.game.path.join(&folder.folder_name);
+                let name = Self::cdlc_name(&path).unwrap_or_else(|| folder.folder_name.clone());
+                self.installed.insert(
+                    id.clone(),
+                    Mod { id, name, path, kind: ItemKind::Cdlc, folder_name: Some(folder.folder_name) },
+                );
+            }
+            if known_ids.contains(&CONTACT_APP_ID)
+                && let Some(folder_name) = steam::check_contact_dlc(&self.paths.game.path)
+            {
+                let id = CONTACT_APP_ID.to_string();
+                if !self.installed.get(&id).is_some_and(|item| item.kind == ItemKind::Mod) {
+                    let path = self.paths.game.path.join(&folder_name);
+                    self.installed.insert(
+                        id.clone(),
+                        Mod {
+                            id,
+                            name: CONTACT_NAME.to_string(),
+                            path,
+                            kind: ItemKind::Contact,
+                            folder_name: Some(folder_name),
+                        },
+                    );
+                }
+            }
+        }
     }
 
     /// Throw away everything learned from the network and write the empty
@@ -77,7 +132,7 @@ impl Resolver {
         self.save();
     }
 
-    /// Installed mods, in the order `mods::list_mods` produced.
+    /// Installed mods and installed DLC, sorted together by name.
     pub fn mods(&self) -> Vec<Mod> {
         let mut list: Vec<Mod> = self.installed.values().cloned().collect();
         list.sort_by_key(|item| item.name.to_lowercase());
@@ -87,25 +142,47 @@ impl Resolver {
     /// Current knowledge about an id, without touching the network.
     pub fn view(&self, id: &str) -> Resolved {
         if let Some(item) = self.installed.get(id) {
-            let deps = self.cache.installed_deps.get(id);
+            if item.kind != ItemKind::Mod {
+                return Resolved {
+                    id: id.to_string(),
+                    name: Some(item.name.clone()),
+                    installed: true,
+                    // DLC has no dependency chain of its own to fetch, so
+                    // this is known-empty rather than unresolved.
+                    requires: Some(Vec::new()),
+                    source: Source::Disk,
+                    fetched_at: String::new(),
+                    kind: item.kind,
+                    folder_name: item.folder_name.clone(),
+                };
+            }
+
+            let deps = match self.cache.status(id) {
+                Some(CacheStatus::Installed(entry)) => Some(entry),
+                _ => None,
+            };
             return Resolved {
                 id: id.to_string(),
                 name: Some(item.name.clone()),
                 installed: true,
-                requires: deps.map(|entry| entry.requires.clone()),
+                requires: deps.as_ref().map(|entry| entry.requires.clone()),
                 source: Source::Disk,
-                fetched_at: deps.map(|entry| entry.fetched_at.clone()).unwrap_or_default(),
+                fetched_at: deps.map(|entry| entry.fetched_at).unwrap_or_default(),
+                kind: ItemKind::Mod,
+                folder_name: None,
             };
         }
 
-        if let Some(entry) = self.cache.entries.get(id) {
+        if let Some(CacheStatus::NotInstalled(entry)) = self.cache.status(id) {
             return Resolved {
                 id: id.to_string(),
-                name: Some(entry.name.clone()),
+                name: Some(entry.name),
                 installed: false,
-                requires: entry.requires.clone(),
+                requires: entry.requires,
                 source: Source::Cache,
-                fetched_at: entry.fetched_at.clone(),
+                fetched_at: entry.fetched_at,
+                kind: ItemKind::Mod,
+                folder_name: None,
             };
         }
 
@@ -116,6 +193,8 @@ impl Resolver {
             requires: None,
             source: Source::Unknown,
             fetched_at: String::new(),
+            kind: ItemKind::Mod,
+            folder_name: None,
         }
     }
 
@@ -133,24 +212,25 @@ impl Resolver {
         let fetched_at = now();
 
         if self.installed.contains_key(id) {
-            self.cache.installed_deps.insert(
+            self.cache.insert(
                 id.to_string(),
-                DepsEntry {
-                    // Recorded so an uninstall can demote this into `entries`
-                    // instead of losing the name disk currently owns.
+                CacheStatus::Installed(DepsEntry {
+                    // Recorded so an uninstall can demote this into a
+                    // not-installed record instead of losing the name disk
+                    // currently owns.
                     name: self.installed.get(id).map(|item| item.name.clone()),
                     requires: page.requires.clone(),
                     fetched_at: fetched_at.clone(),
-                },
+                }),
             );
         } else {
-            self.cache.entries.insert(
+            self.cache.insert(
                 id.to_string(),
-                CacheEntry {
+                CacheStatus::NotInstalled(CacheEntry {
                     name: page.name.clone().unwrap_or_else(|| id.to_string()),
                     requires: Some(page.requires.clone()),
                     fetched_at: fetched_at.clone(),
-                },
+                }),
             );
         }
 
@@ -158,16 +238,16 @@ impl Resolver {
         // any that are neither installed nor already known. Their own
         // dependencies stay unknown until someone asks for them.
         for (child_id, child_name) in &page.required_names {
-            if self.installed.contains_key(child_id) || self.cache.entries.contains_key(child_id) {
+            if self.installed.contains_key(child_id) || self.cache.contains(child_id) {
                 continue;
             }
-            self.cache.entries.insert(
+            self.cache.insert(
                 child_id.clone(),
-                CacheEntry {
+                CacheStatus::NotInstalled(CacheEntry {
                     name: child_name.clone(),
                     requires: None,
                     fetched_at: String::new(),
-                },
+                }),
             );
         }
 
@@ -185,22 +265,22 @@ impl Resolver {
 
         for (id, item) in &result.items {
             if self.installed.contains_key(id) {
-                self.cache.installed_deps.insert(
+                self.cache.insert(
                     id.clone(),
-                    DepsEntry {
+                    CacheStatus::Installed(DepsEntry {
                         name: self.installed.get(id).map(|entry| entry.name.clone()),
                         requires: item.requires.clone(),
                         fetched_at: fetched_at.clone(),
-                    },
+                    }),
                 );
             } else {
-                self.cache.entries.insert(
+                self.cache.insert(
                     id.clone(),
-                    CacheEntry {
+                    CacheStatus::NotInstalled(CacheEntry {
                         name: item.name.clone(),
                         requires: Some(item.requires.clone()),
                         fetched_at: fetched_at.clone(),
-                    },
+                    }),
                 );
             }
         }
@@ -253,18 +333,30 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::steam::Located;
+
+    fn nonexistent_paths() -> SteamPaths {
+        SteamPaths {
+            steam_dir: PathBuf::from("/nonexistent/steam"),
+            game: Located { path: PathBuf::from("/nonexistent/game"), verified: false },
+            workshop: Located { path: PathBuf::from("/nonexistent/workshop"), verified: false },
+        }
+    }
 
     #[test]
     fn unknown_ids_report_nothing_rather_than_guessing() {
         let resolver = Resolver::new(
             PathBuf::from("/nonexistent/workshop"),
             PathBuf::from("/nonexistent/cache.json"),
+            nonexistent_paths(),
         );
         let view = resolver.view("2888888564");
         assert_eq!(view.name, None);
         assert_eq!(view.requires, None);
         assert_eq!(view.source, Source::Unknown);
         assert!(!view.installed);
+        assert_eq!(view.kind, ItemKind::Mod);
+        assert_eq!(view.folder_name, None);
     }
 
     #[test]

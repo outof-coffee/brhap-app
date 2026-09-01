@@ -46,9 +46,16 @@ fn main() {
     // nothing here fetches: `view` is the no-network half of the protocol.
     let ids: HashSet<String> = installed.iter().map(|item| item.id.clone()).collect();
     let cached = cache::load_cache(&ids, &config::cache_file());
-    println!("cache: {} entry(s), {} installed dep list(s)", cached.entries.len(), cached.installed_deps.len());
+    let (entries, installed_deps): (usize, usize) = cached
+        .ids()
+        .fold((0, 0), |(entries, installed_deps), id| match cached.status(id) {
+            Some(cache::CacheStatus::NotInstalled(_)) => (entries + 1, installed_deps),
+            Some(cache::CacheStatus::Installed(_)) => (entries, installed_deps + 1),
+            None => (entries, installed_deps),
+        });
+    println!("cache: {entries} entry(s), {installed_deps} installed dep list(s)");
 
-    let resolver = resolve::Resolver::new(paths.workshop.path.clone(), config::cache_file());
+    let resolver = resolve::Resolver::new(paths.workshop.path.clone(), config::cache_file(), paths.clone());
     println!("resolver views:");
     for item in resolver.mods() {
         let view = resolver.view(&item.id);
@@ -74,7 +81,7 @@ fn main() {
     // spawns nothing; this is the plan, not the act.
     let selected: Vec<String> = installed.iter().map(|item| item.id.clone()).collect();
     let plan =
-        launch::build_launch_plan(&paths, &selected, launch::LaunchOptions::default(), &BTreeMap::new());
+        launch::build_launch_plan(&paths, &selected, &[], launch::LaunchOptions::default(), &BTreeMap::new());
     println!("launch plan: {} symlink(s) would be created", plan.symlinks.len());
     println!("{}", plan.preview);
 }
