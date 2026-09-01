@@ -40,11 +40,43 @@ pub struct DepsEntry {
     pub fetched_at: String,
 }
 
+/// What is known about one id. One id, one variant: installed and
+/// not-installed can never both be true for the same id at once, since
+/// there is exactly one record per id rather than two maps that could
+/// disagree about which of them holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CacheStatus {
+    Installed(DepsEntry),
+    NotInstalled(CacheEntry),
+}
+
 /// The cache as held in memory. BTreeMap so the written file has stable order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Cache {
-    pub entries: BTreeMap<String, CacheEntry>,
-    pub installed_deps: BTreeMap<String, DepsEntry>,
+    records: BTreeMap<String, CacheStatus>,
+}
+
+impl Cache {
+    /// What is known about one id.
+    pub fn status(&self, id: &str) -> Option<CacheStatus> {
+        self.records.get(id).cloned()
+    }
+
+    /// Every id currently recorded, in no particular order.
+    pub fn ids(&self) -> impl Iterator<Item = &str> {
+        self.records.keys().map(String::as_str)
+    }
+
+    /// Record what is known about one id. `pub(crate)`: `resolve.rs` writes
+    /// through this the same way `merge_cache` does; nothing outside this
+    /// crate should be able to bypass `status()`'s single-record guarantee.
+    pub(crate) fn insert(&mut self, id: String, status: CacheStatus) {
+        self.records.insert(id, status);
+    }
+
+    pub(crate) fn contains(&self, id: &str) -> bool {
+        self.records.contains_key(id)
+    }
 }
 
 /// The on-disk shape. Sections are read loosely so one malformed entry cannot
@@ -95,9 +127,13 @@ pub fn merge_cache(raw: &Value, installed_ids: &HashSet<String>) -> Cache {
             // Present but not an array or null: malformed, skip the entry.
             Some(_) => continue,
         };
-        cache.entries.insert(
+        cache.insert(
             id.clone(),
-            CacheEntry { name: name.to_string(), requires, fetched_at: fetched_at_of(value) },
+            CacheStatus::NotInstalled(CacheEntry {
+                name: name.to_string(),
+                requires,
+                fetched_at: fetched_at_of(value),
+            }),
         );
     }
 
@@ -109,19 +145,21 @@ pub fn merge_cache(raw: &Value, installed_ids: &HashSet<String>) -> Cache {
         let fetched_at = fetched_at_of(value);
 
         if installed_ids.contains(id) {
-            cache.installed_deps.insert(id.clone(), DepsEntry { name, requires, fetched_at });
+            cache.insert(id.clone(), CacheStatus::Installed(DepsEntry { name, requires, fetched_at }));
             continue;
         }
 
         // No longer installed, so disk no longer owns the name. Demote the
-        // record into `entries` rather than discarding what we know. Without a
-        // recorded name there is nothing to demote, so the record is dropped.
+        // record into a not-installed one rather than discarding what we
+        // know. Without a recorded name there is nothing to demote, so the
+        // record is dropped.
         if let Some(name) = name
-            && !cache.entries.contains_key(id)
+            && !cache.contains(id)
         {
-            cache
-                .entries
-                .insert(id.clone(), CacheEntry { name, requires: Some(requires), fetched_at });
+            cache.insert(
+                id.clone(),
+                CacheStatus::NotInstalled(CacheEntry { name, requires: Some(requires), fetched_at }),
+            );
         }
     }
 
@@ -136,16 +174,28 @@ pub fn load_cache(installed_ids: &HashSet<String>, file: &Path) -> Cache {
     }
 }
 
-/// Write the cache back out, creating the config directory if needed.
+/// Write the cache back out, creating the config directory if needed. Splits
+/// the one in-memory map back into the two on-disk sections the Node
+/// implementation expects.
 pub fn save_cache(cache: &Cache, file: &PathBuf) -> std::io::Result<()> {
     if let Some(parent) = file.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let out = CacheFileOut {
-        version: 2,
-        entries: &cache.entries,
-        installed_deps: &cache.installed_deps,
-    };
+
+    let mut entries = BTreeMap::new();
+    let mut installed_deps = BTreeMap::new();
+    for (id, status) in &cache.records {
+        match status {
+            CacheStatus::NotInstalled(entry) => {
+                entries.insert(id.clone(), entry.clone());
+            }
+            CacheStatus::Installed(deps) => {
+                installed_deps.insert(id.clone(), deps.clone());
+            }
+        }
+    }
+
+    let out = CacheFileOut { version: 2, entries: &entries, installed_deps: &installed_deps };
     let mut text = serde_json::to_string_pretty(&out)?;
     text.push('\n');
     std::fs::write(file, text)
@@ -185,42 +235,51 @@ mod tests {
     #[test]
     fn drops_entries_for_ids_that_are_now_installed() {
         let cache = merge_cache(&sample(), &ids(&["450814997"]));
-        assert!(!cache.entries.contains_key("450814997"), "installed ids lose their cached name");
-        assert!(cache.entries.contains_key("2888888564"), "uninstalled ids keep theirs");
+        assert_eq!(cache.status("450814997"), None, "installed ids lose their cached name");
+        assert!(cache.status("2888888564").is_some(), "uninstalled ids keep theirs");
     }
 
     #[test]
     fn keeps_a_null_requires_meaning_name_known_deps_unknown() {
         let cache = merge_cache(&sample(), &ids(&[]));
-        let entry = cache.entries.get("450814997").expect("entry present");
-        assert_eq!(entry.name, "CBA_A3");
-        assert_eq!(entry.requires, None);
+        match cache.status("450814997") {
+            Some(CacheStatus::NotInstalled(entry)) => {
+                assert_eq!(entry.name, "CBA_A3");
+                assert_eq!(entry.requires, None);
+            }
+            other => panic!("expected a not-installed record, got {other:?}"),
+        }
     }
 
     #[test]
     fn keeps_installed_dependency_lists_across_a_restart() {
         let cache = merge_cache(&sample(), &ids(&["463939057"]));
-        assert_eq!(
-            cache.installed_deps.get("463939057").map(|entry| entry.requires.clone()),
-            Some(vec!["450814997".to_string()])
-        );
+        match cache.status("463939057") {
+            Some(CacheStatus::Installed(entry)) => {
+                assert_eq!(entry.requires, vec!["450814997".to_string()]);
+            }
+            other => panic!("expected an installed record, got {other:?}"),
+        }
     }
 
     #[test]
     fn drops_installed_deps_for_mods_no_longer_installed() {
         let cache = merge_cache(&sample(), &ids(&["463939057"]));
-        assert!(!cache.installed_deps.contains_key("999999999"));
+        assert!(!matches!(cache.status("999999999"), Some(CacheStatus::Installed(_))));
     }
 
-    /// Uninstalling a mod must not cost us its name. The record moves into
-    /// `entries`, where a not-installed item belongs.
+    /// Uninstalling a mod must not cost us its name. The record moves into a
+    /// not-installed one, where it belongs once nothing is installed.
     #[test]
     fn demotes_a_name_into_entries_when_the_mod_is_uninstalled() {
         let cache = merge_cache(&sample(), &ids(&[]));
-        let demoted = cache.entries.get("463939057").expect("demoted into entries");
-        assert_eq!(demoted.name, "ace");
-        assert_eq!(demoted.requires, Some(vec!["450814997".to_string()]));
-        assert!(!cache.installed_deps.contains_key("463939057"));
+        match cache.status("463939057") {
+            Some(CacheStatus::NotInstalled(entry)) => {
+                assert_eq!(entry.name, "ace");
+                assert_eq!(entry.requires, Some(vec!["450814997".to_string()]));
+            }
+            other => panic!("expected demotion into a not-installed record, got {other:?}"),
+        }
     }
 
     /// A file written by the Node implementation has no name to demote, so
@@ -228,7 +287,7 @@ mod tests {
     #[test]
     fn a_nameless_deps_record_is_dropped_rather_than_invented() {
         let cache = merge_cache(&sample(), &ids(&[]));
-        assert!(!cache.entries.contains_key("999999999"));
+        assert_eq!(cache.status("999999999"), None);
     }
 
     /// An existing entry already describes the item, so demotion must not
@@ -240,7 +299,10 @@ mod tests {
             "installedDeps": { "463939057": { "name": "ace", "requires": [], "fetchedAt": "" } }
         });
         let cache = merge_cache(&raw, &ids(&[]));
-        assert_eq!(cache.entries.get("463939057").map(|entry| entry.name.clone()), Some("from entries".into()));
+        match cache.status("463939057") {
+            Some(CacheStatus::NotInstalled(entry)) => assert_eq!(entry.name, "from entries"),
+            other => panic!("expected the original entries record, got {other:?}"),
+        }
     }
 
     #[test]
@@ -254,14 +316,13 @@ mod tests {
             }
         });
         let cache = merge_cache(&raw, &ids(&[]));
-        assert_eq!(cache.entries.keys().collect::<Vec<_>>(), vec!["c"]);
+        assert_eq!(cache.ids().collect::<Vec<_>>(), vec!["c"]);
     }
 
     #[test]
     fn treats_a_missing_or_unparsable_file_as_empty() {
         let cache = merge_cache(&Value::Null, &ids(&[]));
-        assert!(cache.entries.is_empty());
-        assert!(cache.installed_deps.is_empty());
+        assert_eq!(cache.ids().count(), 0);
         assert_eq!(load_cache(&ids(&[]), Path::new("/nonexistent/cache.json")), Cache::default());
     }
 
@@ -270,16 +331,38 @@ mod tests {
     #[test]
     fn round_trips_through_the_node_file_shape() {
         let cache = merge_cache(&sample(), &ids(&["463939057"]));
-        let out = CacheFileOut {
-            version: 2,
-            entries: &cache.entries,
-            installed_deps: &cache.installed_deps,
-        };
-        let text = serde_json::to_string(&out).expect("serializes");
+        let file = std::env::temp_dir().join("brhap-server-cache-round-trip-test.json");
+        save_cache(&cache, &file).expect("saves");
+
+        let text = std::fs::read_to_string(&file).expect("file written");
         assert!(text.contains("\"installedDeps\""));
         assert!(text.contains("\"fetchedAt\""));
 
-        let reparsed: Value = serde_json::from_str(&text).expect("parses");
-        assert_eq!(merge_cache(&reparsed, &ids(&["463939057"])), cache);
+        let reloaded = load_cache(&ids(&["463939057"]), &file);
+        assert_eq!(reloaded, cache);
+        std::fs::remove_file(&file).ok();
+    }
+
+    /// Behavior test for merge_cache's output: asserted through `status()`,
+    /// not through which field holds the result.
+    #[test]
+    fn status_reports_installed_or_not_installed_without_naming_a_field() {
+        let cache = merge_cache(&sample(), &ids(&["463939057"]));
+
+        match cache.status("463939057") {
+            Some(CacheStatus::Installed(entry)) => {
+                assert_eq!(entry.requires, vec!["450814997".to_string()]);
+            }
+            other => panic!("expected an installed record, got {other:?}"),
+        }
+
+        match cache.status("2888888564") {
+            Some(CacheStatus::NotInstalled(entry)) => {
+                assert_eq!(entry.name, "Advanced Equipment");
+            }
+            other => panic!("expected a not-installed record, got {other:?}"),
+        }
+
+        assert_eq!(cache.status("nonexistent"), None);
     }
 }

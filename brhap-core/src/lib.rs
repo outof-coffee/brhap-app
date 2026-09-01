@@ -24,7 +24,7 @@ use serde::Serialize;
 pub use brhap_server::api::KEY_VAR;
 pub use brhap_server::launch::{LaunchOptions, LaunchPlan, Symlink};
 pub use brhap_server::profiles::{LastLaunch, Profile, Profiles};
-pub use brhap_server::resolve::{Resolved, Source};
+pub use brhap_server::resolve::{ItemKind, Resolved, Source};
 pub use brhap_server::session::{Event, Launched, Listener};
 pub use brhap_server::steam::{Located, SteamPaths};
 pub use settings::{Settings, SettingsRow, settings_rows, stored_steam_key};
@@ -66,7 +66,7 @@ pub struct Core {
     session: Arc<brhap_server::session::Session>,
     paths: SteamPaths,
     profiles: Mutex<brhap_server::profiles::ProfileStore>,
-    settings: Mutex<SettingsStore>
+    settings: Mutex<SettingsStore>,
 }
 
 impl Core {
@@ -79,6 +79,7 @@ impl Core {
         let resolver = brhap_server::resolve::Resolver::new(
             paths.workshop.path.clone(),
             brhap_server::config::cache_file(),
+            paths.clone(),
         );
 
         Self {
@@ -179,23 +180,30 @@ impl Core {
     /// Describe a launch without performing one.
     pub fn preview(
         &self,
-        ids: &[String],
+        mod_ids: &[String],
+        dlc_folders: &[String],
         options: LaunchOptions,
         overrides: &Overrides,
     ) -> LaunchPlan {
-        brhap_server::launch::build_launch_plan(&self.paths, ids, options, overrides)
+        brhap_server::launch::build_launch_plan(&self.paths, mod_ids, dlc_folders, options, overrides)
     }
 
     /// Link the selected mods in and spawn the game.
+    ///
+    /// `dlc_ids` are ids, not the folder names `dlc_folders` carries: what
+    /// gets recorded and later restored by a profile is matched against ids
+    /// the same way mod selection already is.
     pub fn launch(
         &self,
-        ids: &[String],
+        mod_ids: &[String],
+        dlc_folders: &[String],
+        dlc_ids: &[String],
         options: LaunchOptions,
         overrides: &Overrides,
     ) -> Result<Launched, String> {
         // try to save settings, but continue if not
         let _ = locked(&self.settings).save();
-        let plan = self.preview(ids, options, overrides);
+        let plan = self.preview(mod_ids, dlc_folders, options, overrides);
         let launched = self
             .session
             .launch(&plan, &self.paths.workshop.path)
@@ -204,8 +212,9 @@ impl Core {
         // Recorded only once the game is actually running, so a rejected launch
         // leaves the previous record alone. The game is up either way, so a
         // failed write says so rather than reading as a failed launch.
+        let recorded: Vec<String> = mod_ids.iter().chain(dlc_ids).cloned().collect();
         locked(&self.profiles)
-            .record_launch(ids, options, overrides)
+            .record_launch(&recorded, options, overrides)
             .map_err(|error| format!("launched, but the last launch was not recorded: {error}"))?;
 
         Ok(launched)

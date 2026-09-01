@@ -10,15 +10,28 @@ use std::sync::OnceLock;
 use regex::Regex;
 use serde::Serialize;
 
-/// One installed mod.
+/// Whether an id is a Workshop mod or a DLC entry, and which kind of DLC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ItemKind {
+    Mod,
+    Cdlc,
+    Contact,
+}
+
+/// One installed mod, or one installed DLC represented the same way.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Mod {
-    /// Workshop published id, which is also the directory name.
+    /// Workshop published id for a mod, or the DLC's app id, as a string.
     pub id: String,
-    /// Display name, read from meta.cpp.
+    /// Display name, read from meta.cpp (mod), mod.cpp (CDLC), or fixed
+    /// (Contact).
     pub name: String,
-    /// Absolute path to the mod directory.
+    /// Absolute path to the mod or DLC directory.
     pub path: PathBuf,
+    pub kind: ItemKind,
+    /// What a -mod= entry uses. Only ever Some for Cdlc/Contact.
+    pub folder_name: Option<String>,
 }
 
 fn entry_regex() -> &'static Regex {
@@ -51,7 +64,22 @@ pub fn to_mod(dir_name: &str, path: PathBuf, meta: &HashMap<String, String>) -> 
         id: meta.get("publishedid").cloned().unwrap_or_else(|| dir_name.to_string()),
         name: meta.get("name").cloned().unwrap_or_else(|| dir_name.to_string()),
         path,
+        kind: ItemKind::Mod,
+        folder_name: None,
     }
+}
+
+/// Find a directory entry matching `name` case-insensitively, since a
+/// case-sensitive filesystem (most Linux setups) will not match a literal
+/// `dir.join(name)` against a differently-cased real file.
+fn find_case_insensitive(dir: &Path, name: &str) -> Option<PathBuf> {
+    std::fs::read_dir(dir).ok()?.flatten().find_map(|entry| {
+        entry
+            .file_name()
+            .to_str()
+            .is_some_and(|entry_name| entry_name.eq_ignore_ascii_case(name))
+            .then(|| entry.path())
+    })
 }
 
 /// List every mod directory under the workshop content directory. A missing
@@ -69,7 +97,8 @@ pub fn list_mods(workshop_dir: &Path) -> Vec<Mod> {
         }
         let dir_name = entry.file_name().to_string_lossy().to_string();
         let path = entry.path();
-        let meta = std::fs::read_to_string(path.join("meta.cpp"))
+        let meta = find_case_insensitive(&path, "meta.cpp")
+            .and_then(|meta_path| std::fs::read_to_string(meta_path).ok())
             .map(|text| parse_config(&text))
             .unwrap_or_default();
         mods.push(to_mod(&dir_name, path, &meta));
