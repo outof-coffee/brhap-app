@@ -1,6 +1,6 @@
 //! The tables. Typed cells per row, no text stretch.
 
-use brhap_core::SettingsRow;
+use brhap_core::{ItemKind, SettingsRow};
 use iced::widget::text::Text;
 use iced::widget::{button, checkbox, container, row, table, text, text_input, tooltip};
 use iced::{Center, Color, Element, Fill, Length};
@@ -209,8 +209,13 @@ fn name(row: Row) -> Element<'static, Message> {
 }
 
 /// Lit when a local directory has replaced the workshop copy, and the same
-/// control clears it again.
+/// control clears it again. DLC has no override concept, since it is not a
+/// downloaded Workshop copy to begin with.
 fn over(row: Row) -> Element<'static, Message> {
+    if row.kind != ItemKind::Mod {
+        return text("").into();
+    }
+
     let set = row.over.is_some();
     let glyph = bootstrap::pencil().size(GLYPH);
     let message = if set {

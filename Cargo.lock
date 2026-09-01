@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "brhap-app"
-version = "0.3.6"
+version = "0.4.0"
 dependencies = [
  "brhap-core",
  "iced",
@@ -485,7 +485,7 @@ dependencies = [
 
 [[package]]
 name = "brhap-core"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "brhap-server",
  "serde",
@@ -493,14 +493,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "brhap-integrations"
+version = "0.1.0"
+dependencies = [
+ "brhap-server",
+ "serde",
+ "serde_json",
+ "steam-vdf-parser",
+]
+
+[[package]]
 name = "brhap-server"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "nix",
  "regex",
  "reqwest",
  "serde",
  "serde_json",
+ "steam-vdf-parser",
 ]
 
 [[package]]
@@ -4224,6 +4235,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "steam-vdf-parser"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae729373438271906eb7fe05df9682a83052f6b242e51b30fd7bcdd4d6addc38"
+dependencies = [
+ "foldhash 0.2.0",
+ "hex",
+ "indexmap",
+ "static_assertions",
+ "winnow 0.7.15",
+]
+
+[[package]]
 name = "strict-num"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4519,7 +4543,7 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "toml_parser",
- "winnow",
+ "winnow 1.0.4",
 ]
 
 [[package]]
@@ -4528,7 +4552,7 @@ version = "1.1.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56"
 dependencies = [
- "winnow",
+ "winnow 1.0.4",
 ]
 
 [[package]]
@@ -5504,6 +5528,15 @@ dependencies = [
 
 [[package]]
 name = "winnow"
+version = "0.7.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
@@ -5650,7 +5683,7 @@ dependencies = [
  "uds_windows",
  "uuid",
  "windows-sys 0.61.2",
- "winnow",
+ "winnow 1.0.4",
  "zbus_macros",
  "zbus_names",
  "zvariant",
@@ -5678,7 +5711,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8bf88b4a3ff53e883001e0e0115b297a9d53c31b9c1edd2bfdd853e3428624e"
 dependencies = [
  "serde",
- "winnow",
+ "winnow 1.0.4",
  "zvariant",
 ]
 
@@ -5816,7 +5849,7 @@ dependencies = [
  "endi",
  "enumflags2",
  "serde",
- "winnow",
+ "winnow 1.0.4",
  "zcheapstr",
  "zvariant_derive",
  "zvariant_utils",
@@ -5845,5 +5878,5 @@ dependencies = [
  "quote",
  "serde",
  "syn 3.0.3",
- "winnow",
+ "winnow 1.0.4",
 ]

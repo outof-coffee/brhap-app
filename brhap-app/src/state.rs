@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use brhap_core::{
-    Core, Event, LaunchOptions, LaunchPlan, Overrides, Profiles, Resolved, Settings, SettingsRow,
+    Core, Event, ItemKind, LaunchOptions, LaunchPlan, Overrides, Profiles, Resolved, Settings, SettingsRow,
     Snapshot,
 };
 use iced::Task;
@@ -48,6 +48,10 @@ pub(crate) struct Brhap {
 
     /// Mirrors the status line the web UI shows, so the two read the same.
     pub(crate) status: String,
+    /// Whether `status` already holds a specific terminal result (an exit
+    /// code or an error), so a later `Event::State{running: false}` knows
+    /// not to overwrite it with a generic "idle".
+    status_is_terminal: bool,
     pub(crate) pid: Option<u32>,
     /// Comes from the session stream, so an exit nobody asked for still lands.
     pub(crate) running: bool,
@@ -99,6 +103,7 @@ pub(crate) struct Row {
     pub(crate) selected: bool,
     pub(crate) status: Status,
     pub(crate) over: Option<std::path::PathBuf>,
+    pub(crate) kind: ItemKind,
 }
 
 /// One line of the profile table. `table()` hands the view closures an owned
@@ -177,6 +182,7 @@ impl Brhap {
             rescanning: false,
             rescan_note: String::new(),
             status: "idle".to_string(),
+            status_is_terminal: false,
             pid: None,
             running: false,
             launch_error: String::new(),
@@ -205,7 +211,9 @@ impl Brhap {
         }
     }
 
-    /// Take a fresh snapshot off the UI thread.
+    /// Take a fresh snapshot off the UI thread. Installed DLC rides along
+    /// with mods here, the same as mods themselves: local disk detection,
+    /// no network, from `Resolver::rescan()`.
     pub(crate) fn reload(&self) -> Task<Message> {
         let core = Arc::clone(&self.core);
         Task::perform(work::blocking(move || core.snapshot()), Message::Loaded)
@@ -218,9 +226,38 @@ impl Brhap {
         self.mod_ids.iter().filter(|id| self.selected.contains(*id)).count()
     }
 
-    /// The selection in `mod_ids` order, which is the order `-mod=` gets.
+    /// The selected mod ids, in `mod_ids` order, which is the order `-mod=`
+    /// gets. DLC ids are excluded (see `selected_dlc_folders`).
     pub(crate) fn selected_ids(&self) -> Vec<String> {
-        self.mod_ids.iter().filter(|id| self.selected.contains(*id)).cloned().collect()
+        self.mod_ids
+            .iter()
+            .filter(|id| self.selected.contains(*id) && self.item(id).kind == ItemKind::Mod)
+            .cloned()
+            .collect()
+    }
+
+    /// The folder names of selected, installed DLC, in `mod_ids` order. What
+    /// `-mod=` uses.
+    pub(crate) fn selected_dlc_folders(&self) -> Vec<String> {
+        self.mod_ids
+            .iter()
+            .filter(|id| self.selected.contains(*id))
+            .filter_map(|id| {
+                let item = self.item(id);
+                (item.kind != ItemKind::Mod).then_some(item.folder_name).flatten()
+            })
+            .collect()
+    }
+
+    /// The ids (not folder names) of selected, installed DLC, in `mod_ids`
+    /// order. What a saved profile/last-launch record needs, since restoring
+    /// one matches against ids the same way mods do.
+    pub(crate) fn selected_dlc_ids(&self) -> Vec<String> {
+        self.mod_ids
+            .iter()
+            .filter(|id| self.selected.contains(*id) && self.item(id).kind != ItemKind::Mod)
+            .cloned()
+            .collect()
     }
 
     /// Rebuild the plan from the current inputs.
@@ -230,7 +267,8 @@ impl Brhap {
     /// computation, no filesystem or network, so it runs inline.
     pub(crate) fn replan(&mut self) {
         let ids = self.selected_ids();
-        self.plan = Some(self.core.preview(&ids, self.options, &self.overrides));
+        let dlc_folders = self.selected_dlc_folders();
+        self.plan = Some(self.core.preview(&ids, &dlc_folders, self.options, &self.overrides));
     }
 
     /// Replace what is known rather than merging into it.
@@ -254,6 +292,8 @@ impl Brhap {
             requires: None,
             source: brhap_core::Source::Unknown,
             fetched_at: String::new(),
+            kind: ItemKind::Mod,
+            folder_name: None,
         })
     }
 
@@ -286,16 +326,22 @@ impl Brhap {
         }
     }
 
-    /// The table's rows, in `mod_ids` order.
+    /// The table's rows, in `mod_ids` order. DLC ids sit in `mod_ids`
+    /// alongside Workshop mods, since `Resolver::mods()` returns both, so
+    /// this needs only the one loop.
     pub(crate) fn rows(&self) -> Vec<Row> {
         self.mod_ids
             .iter()
-            .map(|id| Row {
-                id: id.clone(),
-                name: self.item(id).name.unwrap_or_else(|| id.clone()),
-                selected: self.selected.contains(id),
-                status: self.status_of(id),
-                over: self.overrides.get(id).cloned(),
+            .map(|id| {
+                let item = self.item(id);
+                Row {
+                    id: id.clone(),
+                    name: item.name.unwrap_or_else(|| id.clone()),
+                    selected: self.selected.contains(id),
+                    status: self.status_of(id),
+                    over: self.overrides.get(id).cloned(),
+                    kind: item.kind,
+                }
             })
             .collect()
     }
@@ -357,21 +403,28 @@ impl Brhap {
             Event::State { running, pid } => {
                 self.running = running;
                 self.pid = pid;
-                if !running && self.status.starts_with("running") {
+                if !running && !self.status_is_terminal {
                     self.status = "idle".to_string();
                 }
             }
             Event::Linked { removed, created } => {
                 self.status = format!("linked {created} mod(s), removed {removed} stale link(s)");
             }
-            Event::Spawned { pid } => self.status = format!("running as pid {pid}"),
+            Event::Spawned { pid } => {
+                self.status = format!("running as pid {pid}");
+                self.status_is_terminal = false;
+            }
             Event::Exited { code } => {
                 self.status = match code {
                     Some(code) => format!("exited with code {code}"),
                     None => "exited with code none".to_string(),
                 };
+                self.status_is_terminal = true;
             }
-            Event::Error { message } => self.status = format!("error: {message}"),
+            Event::Error { message } => {
+                self.status = format!("error: {message}");
+                self.status_is_terminal = true;
+            }
         }
     }
 }

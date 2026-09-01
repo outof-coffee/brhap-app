@@ -57,10 +57,12 @@ pub(crate) fn update(state: &mut Brhap, message: Message) -> Task<Message> {
 
             let core = Arc::clone(&state.core);
             let ids = state.selected_ids();
+            let dlc_folders = state.selected_dlc_folders();
+            let dlc_ids = state.selected_dlc_ids();
             let options = state.options;
             let overrides = state.overrides.clone();
             Task::perform(
-                work::blocking(move || core.launch(&ids, options, &overrides)),
+                work::blocking(move || core.launch(&ids, &dlc_folders, &dlc_ids, options, &overrides)),
                 Message::Launched,
             )
         }
@@ -85,11 +87,11 @@ pub(crate) fn update(state: &mut Brhap, message: Message) -> Task<Message> {
             let core = Arc::clone(&state.core);
             Task::perform(
                 work::blocking(move || {
-                    // Rescan first. It picks up newly subscribed mods, and it
-                    // drops the cached requires of anything that used to be a
-                    // known dependency and is now installed
-                    // (brhap-server/src/cache.rs:85-88). The walk is what puts
-                    // those back, so doing it second self-heals.
+                    // Rescan first. It picks up newly subscribed mods and
+                    // installed DLC, and it drops the cached requires of
+                    // anything that used to be a known dependency and is now
+                    // installed (brhap-server/src/cache.rs:85-88). The walk
+                    // is what puts those back, so doing it second self-heals.
                     let scanned = core.rescan();
                     let installed = format!("{} mod(s) installed.", scanned.mods.len());
 

@@ -12,6 +12,12 @@
 /// Steam Workshop app id for Arma 3.
 pub const ARMA_APP_ID: &str = "107410";
 
+/// Contact's own app id in the DLC catalog.
+pub const CONTACT_APP_ID: u64 = 1021790;
+/// Contact has no mod.cpp to read a display name from, unlike CDLC. This is
+/// a fixed official product name, not expected to change.
+pub const CONTACT_NAME: &str = "Arma 3 Contact";
+
 pub mod api;
 pub mod cache;
 pub mod config;
@@ -23,3 +29,4 @@ pub mod resolve;
 pub mod scrape;
 pub mod session;
 pub mod steam;
+pub mod store;

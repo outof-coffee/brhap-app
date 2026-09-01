@@ -51,11 +51,28 @@ pub struct LaunchPlan {
     pub preview: String,
 }
 
+/// Find a directory entry matching `name` case-insensitively, since a
+/// case-sensitive filesystem (most Linux setups) will not match a literal
+/// `dir.join(name)` against a differently-cased real file. Falls back to the
+/// literal join when nothing matches, so a synthetic or missing `dir` still
+/// yields a path rather than nothing.
+fn find_case_insensitive(dir: &std::path::Path, name: &str) -> PathBuf {
+    std::fs::read_dir(dir)
+        .ok()
+        .and_then(|entries| {
+            entries
+                .flatten()
+                .find(|entry| entry.file_name().to_str().is_some_and(|entry_name| entry_name.eq_ignore_ascii_case(name)))
+        })
+        .map(|entry| entry.path())
+        .unwrap_or_else(|| dir.join(name))
+}
+
 /// The game binary inside the macOS app bundle, or the bare binary elsewhere.
 ///
-/// The macOS path is confirmed on a real install. The Linux name is not: it
-/// has never been run here, and needs checking on an actual Linux box before
-/// it is trusted.
+/// The Linux name is matched case-insensitively against the real directory
+/// entry, since a case-sensitive filesystem will not match a literal
+/// `dir.join("arma3_x64")` against a differently-cased file.
 ///
 /// `intel_mode` picks the universal `ArmA3.app` build over the default
 /// Apple Silicon native one, for Intel Macs.
@@ -67,7 +84,7 @@ pub fn executable_for(game_dir: &std::path::Path, intel_mode: bool) -> PathBuf {
             game_dir.join("ArmA3 AS Native.app").join("Contents").join("MacOS").join("ArmA3 AS Native")
         }
     } else {
-        game_dir.join("arma3_x64")
+        find_case_insensitive(game_dir, "arma3_x64")
     }
 }
 
@@ -91,22 +108,35 @@ fn quote(value: &str) -> String {
 }
 
 /// Describe a launch. Performs nothing.
+///
+/// DLC folder names precede mod ids in `-mod=`, per Bohemia's own ordering
+/// requirement. DLC gets no Symlink: CDLC/Contact folders already sit inside
+/// the game directory, unlike workshop mods.
 pub fn build_launch_plan(
     paths: &SteamPaths,
-    ids: &[String],
+    mod_ids: &[String],
+    dlc_folders: &[String],
     options: LaunchOptions,
     overrides: &BTreeMap<String, PathBuf>,
 ) -> LaunchPlan {
     let mut unique: Vec<String> = Vec::new();
-    for id in ids {
+    for id in mod_ids {
         if !unique.contains(id) {
             unique.push(id.clone());
         }
     }
 
+    let mut unique_dlc: Vec<String> = Vec::new();
+    for folder in dlc_folders {
+        if !unique_dlc.contains(folder) {
+            unique_dlc.push(folder.clone());
+        }
+    }
+
     let mut args: Vec<String> = Vec::new();
-    if !unique.is_empty() {
-        args.push(format!("-mod={}", unique.join(";")));
+    let mod_arg: Vec<String> = unique_dlc.iter().chain(unique.iter()).cloned().collect();
+    if !mod_arg.is_empty() {
+        args.push(format!("-mod={}", mod_arg.join(";")));
     }
     if options.no_splash {
         args.push("-noSplash".into());
@@ -186,6 +216,7 @@ mod tests {
         let plan = build_launch_plan(
             &paths(),
             &ids(&["450814997", "463939057"]),
+            &[],
             LaunchOptions::default(),
             &no_overrides(),
         );
@@ -194,7 +225,7 @@ mod tests {
 
     #[test]
     fn adds_no_mod_argument_when_nothing_is_selected() {
-        let plan = build_launch_plan(&paths(), &[], LaunchOptions::default(), &no_overrides());
+        let plan = build_launch_plan(&paths(), &[], &[], LaunchOptions::default(), &no_overrides());
         assert!(plan.args.is_empty());
     }
 
@@ -203,10 +234,35 @@ mod tests {
         let plan = build_launch_plan(
             &paths(),
             &ids(&["463939057", "450814997", "463939057"]),
+            &[],
             LaunchOptions::default(),
             &no_overrides(),
         );
         assert_eq!(plan.args, vec!["-mod=463939057;450814997"]);
+    }
+
+    #[test]
+    fn dlc_folders_precede_mod_ids_in_the_mod_argument() {
+        let plan = build_launch_plan(
+            &paths(),
+            &ids(&["450814997"]),
+            &ids(&["WS", "Contact"]),
+            LaunchOptions::default(),
+            &no_overrides(),
+        );
+        assert_eq!(plan.args, vec!["-mod=WS;Contact;450814997"]);
+    }
+
+    #[test]
+    fn dlc_folders_get_no_symlink() {
+        let plan = build_launch_plan(
+            &paths(),
+            &[],
+            &ids(&["WS"]),
+            LaunchOptions::default(),
+            &no_overrides(),
+        );
+        assert!(plan.symlinks.is_empty());
     }
 
     #[test]
@@ -218,14 +274,19 @@ mod tests {
             intel_mode: false,
             steam_overlay: false,
         };
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), options, &no_overrides());
+        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), &[], options, &no_overrides());
         assert_eq!(plan.args, vec!["-mod=450814997", "-noSplash", "-world=empty"]);
     }
 
     #[test]
     fn omits_the_overlay_injection_when_steam_overlay_is_off() {
-        let plan =
-            build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &no_overrides());
+        let plan = build_launch_plan(
+            &paths(),
+            &ids(&["450814997"]),
+            &[],
+            LaunchOptions::default(),
+            &no_overrides(),
+        );
         assert!(!plan.env.contains_key("DYLD_INSERT_LIBRARIES"));
         assert!(!plan.env.contains_key("DYLD_FORCE_FLAT_NAMESPACE"));
     }
@@ -234,7 +295,7 @@ mod tests {
     #[test]
     fn injects_the_overlay_on_macos_when_steam_overlay_is_on() {
         let options = LaunchOptions { steam_overlay: true, ..LaunchOptions::default() };
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), options, &no_overrides());
+        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), &[], options, &no_overrides());
         assert_eq!(
             plan.env.get("DYLD_INSERT_LIBRARIES"),
             Some(&"/steam/Steam.AppBundle/Steam/Contents/MacOS/gameoverlayrenderer.dylib".to_string())
@@ -244,15 +305,25 @@ mod tests {
 
     #[test]
     fn runs_from_the_game_directory_so_bare_ids_resolve() {
-        let plan =
-            build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &no_overrides());
+        let plan = build_launch_plan(
+            &paths(),
+            &ids(&["450814997"]),
+            &[],
+            LaunchOptions::default(),
+            &no_overrides(),
+        );
         assert_eq!(plan.cwd, PathBuf::from("/steam/steamapps/common/Arma 3"));
     }
 
     #[test]
     fn links_each_workshop_directory_in_under_its_id() {
-        let plan =
-            build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &no_overrides());
+        let plan = build_launch_plan(
+            &paths(),
+            &ids(&["450814997"]),
+            &[],
+            LaunchOptions::default(),
+            &no_overrides(),
+        );
         assert_eq!(
             plan.symlinks,
             vec![Symlink {
@@ -266,7 +337,13 @@ mod tests {
     fn an_override_replaces_the_workshop_directory_as_the_symlink_target() {
         let mut overrides = BTreeMap::new();
         overrides.insert("450814997".to_string(), PathBuf::from("/Users/tester/mymod"));
-        let plan = build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &overrides);
+        let plan = build_launch_plan(
+            &paths(),
+            &ids(&["450814997"]),
+            &[],
+            LaunchOptions::default(),
+            &overrides,
+        );
         assert_eq!(
             plan.symlinks,
             vec![Symlink {
@@ -281,6 +358,7 @@ mod tests {
         let plan = build_launch_plan(
             &paths(),
             &ids(&["450814997", "463939057"]),
+            &[],
             LaunchOptions::default(),
             &no_overrides(),
         );
@@ -290,8 +368,13 @@ mod tests {
 
     #[test]
     fn quotes_the_game_path_in_the_display_preview_only() {
-        let plan =
-            build_launch_plan(&paths(), &ids(&["450814997"]), LaunchOptions::default(), &no_overrides());
+        let plan = build_launch_plan(
+            &paths(),
+            &ids(&["450814997"]),
+            &[],
+            LaunchOptions::default(),
+            &no_overrides(),
+        );
         assert!(plan.preview.contains("'/steam/steamapps/common/Arma 3'"));
         assert!(plan.preview.contains("-mod=450814997"));
     }

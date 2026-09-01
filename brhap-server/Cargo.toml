@@ -1,6 +1,6 @@
 [package]
 name = "brhap-server"
-version = "0.1.1"
+version = "0.4.0"
 edition = "2024"
 
 [dependencies]
@@ -9,3 +9,4 @@ regex = "1.13.1"
 reqwest = { version = "0.13.4", features = ["blocking", "gzip", "deflate"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1"
+steam-vdf-parser = "0.1"
