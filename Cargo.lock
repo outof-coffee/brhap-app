@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "brhap-app"
-version = "0.3.6"
+version = "0.4.0"
 dependencies = [
  "brhap-core",
  "iced",
@@ -485,7 +485,7 @@ dependencies = [
 
 [[package]]
 name = "brhap-core"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "brhap-server",
  "serde",
@@ -504,7 +504,7 @@ dependencies = [
 
 [[package]]
 name = "brhap-server"
-version = "0.1.1"
+version = "0.4.0"
 dependencies = [
  "nix",
  "regex",
